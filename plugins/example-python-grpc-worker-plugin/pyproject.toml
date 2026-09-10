@@ -20,6 +20,10 @@ test = [
   "pytest-asyncio>=0.26",
 ]
 
+[tool.uv]
+# Own this policy so parent repository settings cannot invalidate the plugin lock.
+prerelease = "disallow"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

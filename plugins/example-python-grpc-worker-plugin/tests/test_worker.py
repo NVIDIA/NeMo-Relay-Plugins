@@ -141,6 +141,27 @@ def test_project_builds_an_importable_wheel(tmp_path: Path) -> None:
         sys.path.remove(str(wheel))
 
 
+@pytest.mark.parametrize("parent_policy", [None, "allow", "if-necessary-or-explicit"])
+def test_lock_is_portable_across_parent_uv_settings(tmp_path: Path, parent_policy: str | None) -> None:
+    if parent_policy is not None:
+        (tmp_path / "pyproject.toml").write_text(
+            f'[tool.uv]\nprerelease = "{parent_policy}"\n', encoding="utf-8"
+        )
+    project = tmp_path / "standalone-worker"
+    project.mkdir()
+    for filename in ["pyproject.toml", "uv.lock"]:
+        shutil.copy2(EXAMPLE_ROOT / filename, project / filename)
+    before = (project / "uv.lock").read_bytes()
+    result = subprocess.run(
+        ["uv", "lock", "--check", "--offline", "--project", str(project)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (project / "uv.lock").read_bytes() == before
+
+
 def test_default_configuration_is_valid(example: Any) -> None:
     assert example.ExamplePythonWorker().validate(example.DEFAULT_CONFIG) == []
     assert example.DEFAULT_CONFIG["registration_control"]["enabled"] is False
