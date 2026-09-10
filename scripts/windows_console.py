@@ -7,8 +7,27 @@ https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent
 """
 
 import ctypes
+import subprocess
 import sys
 from ctypes import wintypes
+
+
+def run_gateway(argv: list[str]) -> int:
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.SetConsoleCtrlHandler.argtypes = [ctypes.c_void_p, wintypes.BOOL]
+    kernel.SetConsoleCtrlHandler.restype = wintypes.BOOL
+    # Hosted runners may ignore Ctrl+C. That flag is inherited independently
+    # of registered handlers, so explicitly clear it before spawning Relay.
+    if not kernel.SetConsoleCtrlHandler(None, False):
+        raise ctypes.WinError(ctypes.get_last_error())
+    child = subprocess.Popen(argv)
+    # Only the child should handle the console event; relay's exit status is
+    # forwarded once its own graceful teardown has completed.
+    if not kernel.SetConsoleCtrlHandler(None, True):
+        child.kill()
+        child.wait()
+        raise ctypes.WinError(ctypes.get_last_error())
+    return child.wait()
 
 
 def interrupt_console(pid: int):
@@ -53,4 +72,6 @@ def interrupt_console(pid: int):
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "run":
+        sys.exit(run_gateway(sys.argv[2:]))
     interrupt_console(int(sys.argv[1]))

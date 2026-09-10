@@ -155,8 +155,18 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                 port = sock.getsockname()[1]
             log_path = state / "gateway.log"
             with log_path.open("w") as log:
+                command = [*base, "--bind", f"127.0.0.1:{port}", "--openai-base-url", upstream]
+                if os.name == "nt":
+                    command = [
+                        # Avoid the venv redirector, which adds another process
+                        # with its own console signal handling.
+                        sys._base_executable,
+                        str(Path(__file__).with_name("windows_console.py")),
+                        "run",
+                        *command,
+                    ]
                 proc = subprocess.Popen(
-                    [*base, "--bind", f"127.0.0.1:{port}", "--openai-base-url", upstream],
+                    command,
                     env=env,
                     cwd=state,
                     stdout=log,
