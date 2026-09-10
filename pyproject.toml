@@ -2,10 +2,13 @@
 name = "nemo-relay-plugin-release-tools"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["jsonschema==4.25.1", "tomli-w==1.2.0"]
+dependencies = ["jsonschema==4.26.0", "tomli-w==1.2.0"]
 
 [dependency-groups]
-test = ["pytest==8.4.2", "ruff==0.14.0", "pyyaml==6.0.3"]
+test = ["pytest==9.1.1", "ruff==0.16.7", "pyyaml==6.0.3"]
+
+[tool.uv]
+prerelease = "disallow"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
