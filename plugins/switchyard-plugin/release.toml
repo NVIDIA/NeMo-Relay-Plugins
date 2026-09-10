@@ -19,7 +19,7 @@ ref = "main"
 sha = "8dc891195a5fa71350f5a03c19f9eecc0f9fcb09"
 
 [toolchains]
-python = "3.13"
+python = "3.11"
 rust = "1.96.1"
 
 [commands.build]

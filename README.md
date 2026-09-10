@@ -71,7 +71,7 @@ location = "in-tree"
 path = "."
 
 [toolchains]
-python = "3.13"
+python = "3.11"
 rust = "1.96.1" # optional for non-Rust plugins
 
 [commands.build]
@@ -133,6 +133,8 @@ path = "crates/switchyard-nemo-relay-plugin"
 `sha` is mandatory and authoritative. `ref` records the branch/tag/ref being tracked; CI does not resolve it to newer code. Update the SHA through a reviewed manifest change and test it before releasing. The entire remote repository is fetched so sibling workspace dependencies remain available. The initial remote integration uses a publicly readable repository; private upstream access requires separately provisioned read credentials.
 
 ## CI
+
+External GitHub Actions use full commit SHAs for their latest stable releases, with exact version tags in comments. When updating an action, resolve the newest stable release to its commit SHA. CI and the initial plugin manifests use Python 3.11, NeMo Relay’s minimum supported version; plugins can select a newer Python when their dependencies require it.
 
 PRs and branch pushes validate every manifest and run shared tooling tests. Plugin-local changes select that plugin. Changes to shared scripts, tests, schemas, workflow code, root dependency locks, or licensing select all plugins. Root documentation alone selects none. Missing comparison history conservatively selects all plugins; renames and deletions are included.
 
