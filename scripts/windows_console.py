@@ -21,18 +21,35 @@ def interrupt_console(pid: int):
     kernel.SetConsoleCtrlHandler.restype = wintypes.BOOL
     kernel.GenerateConsoleCtrlEvent.argtypes = [wintypes.DWORD, wintypes.DWORD]
     kernel.GenerateConsoleCtrlEvent.restype = wintypes.BOOL
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
 
-    kernel.FreeConsole()  # A helper launched without a console may already be detached.
-    if not kernel.AttachConsole(pid):
+    process = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+    if not process:
         raise ctypes.WinError(ctypes.get_last_error())
+    kernel.FreeConsole()  # A helper launched without a console may already be detached.
     try:
+        if not kernel.AttachConsole(pid):
+            raise ctypes.WinError(ctypes.get_last_error())
         # Attaching resets handlers; ignore Ctrl+C in this helper only.
         if not kernel.SetConsoleCtrlHandler(None, True):
             raise ctypes.WinError(ctypes.get_last_error())
         if not kernel.GenerateConsoleCtrlEvent(0, 0):
             raise ctypes.WinError(ctypes.get_last_error())
+        # Delivery is asynchronous. Keep the helper attached until Relay exits;
+        # detaching immediately can race console event dispatch.
+        result = kernel.WaitForSingleObject(process, 30_000)
+        if result == 258:  # WAIT_TIMEOUT
+            raise TimeoutError(f"gateway PID {pid} did not exit after Ctrl+C")
+        if result != 0:  # WAIT_OBJECT_0
+            raise ctypes.WinError(ctypes.get_last_error())
     finally:
         kernel.FreeConsole()
+        kernel.CloseHandle(process)
 
 
 if __name__ == "__main__":

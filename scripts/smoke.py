@@ -208,7 +208,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                         env=env,
                         cwd=state,
                         check=True,
-                        timeout=30,
+                        timeout=40,
                     )
                 else:
                     proc.send_signal(signal.SIGINT)
@@ -245,6 +245,12 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
             listed = json.loads(cli("plugins", "list", "--json"))
             if plugin_id in json.dumps(listed):
                 raise AssertionError("removed plugin still appears in registry")
+        except Exception:
+            # Temporary state is removed on failure; retain the gateway evidence
+            # in CI logs before cleanup, including shutdown timeouts.
+            if (state / "gateway.log").exists():
+                print((state / "gateway.log").read_text(encoding="utf-8"), file=sys.stderr)
+            raise
         finally:
             if proc is not None and proc.poll() is None:
                 if os.name == "nt":

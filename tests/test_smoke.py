@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 from pathlib import Path
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -33,3 +34,32 @@ def test_registered_manifest_reports_missing_registration(tmp_path):
     with pytest.raises(RuntimeError, match="Relay did not register") as error:
         registered_manifest(document, manifest)
     assert str(other) in str(error.value)
+
+
+@pytest.mark.parametrize("wait_result", [0, 258, 0xFFFFFFFF])
+def test_windows_console_waits_for_exit_before_detaching(monkeypatch, wait_result):
+    from scripts import windows_console
+
+    kernel = Mock()
+    kernel.OpenProcess.return_value = 42
+    kernel.WaitForSingleObject.return_value = wait_result
+    monkeypatch.setattr(windows_console.ctypes, "WinDLL", lambda *a, **kw: kernel, raising=False)
+    monkeypatch.setattr(windows_console.ctypes, "get_last_error", lambda: 6, raising=False)
+    monkeypatch.setattr(windows_console.ctypes, "WinError", OSError, raising=False)
+
+    if wait_result:
+        with pytest.raises(TimeoutError if wait_result == 258 else OSError):
+            windows_console.interrupt_console(123)
+    else:
+        windows_console.interrupt_console(123)
+
+    kernel.assert_has_calls(
+        [
+            call.AttachConsole(123),
+            call.SetConsoleCtrlHandler(None, True),
+            call.GenerateConsoleCtrlEvent(0, 0),
+            call.WaitForSingleObject(42, 30_000),
+            call.FreeConsole(),
+            call.CloseHandle(42),
+        ]
+    )
