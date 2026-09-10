@@ -31,7 +31,7 @@ def registered_manifest(document: dict, manifest_path: Path) -> dict:
             return record
     raise RuntimeError(
         f"Relay did not register {manifest_path}; "
-        f"registered manifests: {[record['manifest'] for record in records]}"
+        f"registered manifests: {', '.join(record['manifest'] for record in records)}"
     )
 
 
