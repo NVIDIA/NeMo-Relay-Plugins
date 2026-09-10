@@ -87,7 +87,7 @@ argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
 cwd = "source"
 
 [commands.smoke]
-argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "smoke"]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/smoke_test.py"]
 cwd = "plugin"
 
 [artifacts]
@@ -111,9 +111,13 @@ Commands are argument arrays, not shell expressions. `${VARIABLE}` substitution 
 
 The package command must create `artifacts.bundle` relative to `OUTPUT_DIR`. The runtime manifest path is relative to that bundle. The runner verifies integrity and archives it, then invokes the smoke command against `BUNDLE_DIR`. Smoke tests must use that extracted distribution, not source/build outputs. A failure in any stage prevents artifact delivery.
 
+Each plugin owns its command implementations. The initial registrations use `tasks.py` for build, test, and packaging, and `smoke_test.py` for their installed-bundle scenarios. Cargo package names, artifact filenames, runtime files, configuration, requests, and behavior assertions belong in those plugin folders. Switchyard's registration invokes its upstream packager from its pinned workspace.
+
+Shared helpers are optional: `scripts/tasks.py` provides command execution, environment context, platform filename conventions, and manifest digest writing. `scripts/smoke.py` provides a JSON HTTP fixture and the `installed_gateway` context manager for installation, activation, shutdown, tamper rejection, and removal. A plugin supplies its own configuration and gateway arguments, then exercises the yielded gateway URL. Commands may instead use any scripts or tools that satisfy the manifest contract; shared code has no plugin-name dispatch or central recipe registry.
+
 ## Adding or updating a plugin
 
-1. Add `plugins/<name>/release.toml`, source or remote reference, documentation, task scripts, and tests. No root Cargo workspace or central plugin registry is needed.
+1. Add `plugins/<name>/release.toml`, source or remote reference, documentation, task scripts, and tests. Adding an unrelated plugin requires no changes to shared orchestration, no root Cargo workspace, and no central plugin registry.
 2. Choose `worker` or `native` and declare any platform restrictions. Keep all declared platforms mandatory.
 3. Lock SDK/runtime dependencies independently. Preserve upstream licensing and attribution.
 4. Implement configuration/behavior tests and an installed-bundle test that proves activation, a representative managed request, shutdown/removal, and integrity rejection. The examples use a loopback HTTP provider without credentials.

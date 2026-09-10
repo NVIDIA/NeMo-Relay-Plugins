@@ -1,12 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Plugin-owned entrypoint; shared recipes implement this example's build contract."""
+"""Build, test, and package this plugin independently of other registrations."""
 
+import argparse
 import os
 import sys
-from pathlib import Path
+import shutil
+import tomllib
 
 sys.path.insert(0, os.environ["REPO_DIR"])
-from scripts.recipes import run_recipe
+from scripts.tasks import Context, executable_filename, run, write_runtime_manifest
+
+
+def build(ctx: Context):
+    run(["cargo", "build", "--locked", "--release"], cwd=ctx.source)
+
+
+def test(ctx: Context):
+    run(["cargo", "test", "--locked", "--release"], cwd=ctx.source)
+
+
+def package(ctx: Context):
+    ctx.bundle.mkdir(parents=True)
+    filename = executable_filename("nemo-relay-rust-grpc-worker-plugin-example", ctx.platform)
+    shutil.copy2(ctx.target / "release" / filename, ctx.bundle / filename)
+    manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
+    manifest["source"]["artifact"] = filename
+    manifest["load"]["entrypoint"] = filename
+    for filename in ["config.schema.json", "LICENSE"]:
+        shutil.copy2(ctx.source / filename, ctx.bundle / filename)
+    if (ctx.source / "NOTICE").exists():
+        shutil.copy2(ctx.source / "NOTICE", ctx.bundle / "NOTICE")
+    write_runtime_manifest(ctx.bundle, manifest)
+
 
 if __name__ == "__main__":
-    run_recipe(Path(__file__).parent.name, sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("stage", choices=["build", "test", "package"])
+    args = parser.parse_args()
+    {"build": build, "test": test, "package": package}[args.stage](Context.from_environment())

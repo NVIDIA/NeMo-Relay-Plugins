@@ -32,7 +32,7 @@ argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
 cwd = "source"
 
 [commands.smoke]
-argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "smoke"]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/smoke_test.py"]
 cwd = "source"
 
 [artifacts]

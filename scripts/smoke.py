@@ -13,6 +13,8 @@ import tempfile
 import threading
 import time
 import tomllib
+from contextlib import contextmanager
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -35,41 +37,73 @@ def registered_manifest(document: dict, manifest_path: Path) -> dict:
     )
 
 
-def smoke(bundle: Path, relay: Path, switchyard: bool = False):
-    manifest_path = bundle / "relay-plugin.toml"
-    manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
-    plugin_id = manifest["plugin"]["id"]
+@dataclass
+class HttpFixture:
+    url: str
+    calls: list
+
+
+@contextmanager
+def json_http_fixture(response: dict):
+    """Serve a caller-supplied JSON response and record POST bodies and headers."""
     calls = []
 
     class Provider(BaseHTTPRequestHandler):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append((body, self.headers))
-            response = json.dumps(
-                {
-                    "id": "smoke",
-                    "object": "chat.completion",
-                    "created": 1,
-                    "model": body["model"],
-                    "choices": [
-                        {
-                            "index": 0,
-                            "message": {"role": "assistant", "content": "bundle-smoke-ok"},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-                }
-            ).encode()
+            payload = json.dumps(response).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
-            self.wfile.write(response)
+            self.wfile.write(payload)
 
         def log_message(self, *_args):
             pass
 
+    provider = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    thread = threading.Thread(target=provider.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield HttpFixture(f"http://127.0.0.1:{provider.server_port}", calls)
+    finally:
+        provider.shutdown()
+        provider.server_close()
+        thread.join(timeout=5)
+
+
+def post_json(url: str, body: dict) -> dict:
+    request = Request(
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.load(response)
+    except HTTPError as error:
+        raise RuntimeError(error.read().decode()) from error
+
+
+@contextmanager
+def installed_gateway(
+    bundle: Path,
+    relay: Path,
+    config: dict,
+    *,
+    gateway_args: tuple[str, ...] = (),
+    runtime_manifest: str = "relay-plugin.toml",
+):
+    """Install and activate a bundle, yielding its gateway URL for caller-owned tests.
+
+    Successful tests must also pass graceful shutdown, tamper rejection, and
+    removal. On failure, retain gateway diagnostics and clean up child processes.
+    """
+    manifest_path = bundle / runtime_manifest
+    manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+    plugin_id = manifest["plugin"]["id"]
+    plugin_config = config
     with tempfile.TemporaryDirectory(prefix="relay-install-") as temporary:
         state = Path(temporary)
         config = state / "config.toml"
@@ -122,31 +156,11 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
 
         validate(str(manifest_path))
         cli("plugins", "add", str(manifest_path))
-        provider = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
-        thread = threading.Thread(target=provider.serve_forever, daemon=True)
-        thread.start()
         proc = None
         try:
-            upstream = f"http://127.0.0.1:{provider.server_port}/v1"
             document = tomllib.loads(plugins.read_text(encoding="utf-8"))
             record = registered_manifest(document, manifest_path)
-            if switchyard:
-                record["config"] = {
-                    "switchyard_config": {
-                        "schema_version": 1,
-                        "llm_clients": {"primary": {"format": "openai_chat", "base_url": upstream}},
-                        "targets": {"default": {"id": "example/model", "llm_client": "primary"}},
-                        "routes": {
-                            "default": {
-                                "id": "switchyard/default",
-                                "type": "passthrough",
-                                "target": "default",
-                            }
-                        },
-                    }
-                }
-            else:
-                record["config"] = {"requests": {"header_value": "bundle-smoke"}}
+            record["config"] = plugin_config
             plugins.write_text(tomli_w.dumps(document))
             cli("plugins", "enable", plugin_id)
             validate(plugin_id)
@@ -155,7 +169,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                 port = sock.getsockname()[1]
             log_path = state / "gateway.log"
             with log_path.open("w") as log:
-                command = [*base, "--bind", f"127.0.0.1:{port}", "--openai-base-url", upstream]
+                command = [*base, "--bind", f"127.0.0.1:{port}", *gateway_args]
                 if os.name == "nt":
                     command = [
                         # Avoid the venv redirector, which adds another process
@@ -186,28 +200,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                             break
                     except OSError:
                         time.sleep(0.2)
-                model = "switchyard/default" if switchyard else "smoke-model"
-                request = Request(
-                    f"http://127.0.0.1:{port}/v1/chat/completions",
-                    data=json.dumps(
-                        {"model": model, "messages": [{"role": "user", "content": "test"}]}
-                    ).encode(),
-                    headers={"Content-Type": "application/json"},
-                )
-                try:
-                    with urlopen(request, timeout=30) as response:
-                        body = json.load(response)
-                except HTTPError as error:
-                    raise RuntimeError(
-                        error.read().decode() + "\n" + log_path.read_text(encoding="utf-8")
-                    ) from error
-                if body["choices"][0]["message"]["content"] != "bundle-smoke-ok" or len(calls) != 1:
-                    raise AssertionError("managed request did not reach the fixture exactly once")
-                if switchyard:
-                    if calls[0][0]["model"] != "example/model":
-                        raise AssertionError("Switchyard did not resolve the configured route")
-                elif calls[0][1].get("x-nemo-relay-plugin") != "bundle-smoke":
-                    raise AssertionError("plugin did not intercept the managed request")
+                yield f"http://127.0.0.1:{port}"
                 if os.name == "nt":
                     subprocess.run(
                         [
@@ -234,7 +227,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                 artifact.write_bytes(original + b"tampered")
                 validate(str(manifest_path), valid=False)
                 blocked = subprocess.run(
-                    [*base, "--bind", "127.0.0.1:0", "--openai-base-url", upstream],
+                    [*base, "--bind", "127.0.0.1:0", *gateway_args],
                     env=env,
                     cwd=state,
                     capture_output=True,
@@ -270,6 +263,3 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                 else:
                     proc.kill()
                 proc.wait(timeout=15)
-            provider.shutdown()
-            provider.server_close()
-            thread.join(timeout=5)

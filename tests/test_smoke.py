@@ -8,7 +8,14 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from scripts.smoke import registered_manifest
+from scripts.smoke import json_http_fixture, post_json, registered_manifest
+
+
+def test_http_fixture_accepts_unrelated_request_and_response_shapes():
+    with json_http_fixture({"reply": 42}) as fixture:
+        assert post_json(fixture.url + "/custom-operation", {"event": "custom"}) == {"reply": 42}
+        assert len(fixture.calls) == 1
+        assert fixture.calls[0][0] == {"event": "custom"}
 
 
 def test_registered_manifest_matches_file_identity(tmp_path):
