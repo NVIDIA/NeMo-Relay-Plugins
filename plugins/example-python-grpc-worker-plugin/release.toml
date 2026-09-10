@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+schema_version = 1
+name = "example-python-grpc-worker-plugin"
+version = "0.1.0"
+type = "worker"
+platforms = ["linux-x86_64", "linux-arm64", "windows-x86_64", "macos-arm64"]
+
+[metadata]
+description = "example python grpc worker plugin"
+license = "Apache-2.0"
+authors = ["NVIDIA Corporation"]
+repository = "https://github.com/NVIDIA/NeMo-Relay-Plugins"
+documentation = "https://github.com/NVIDIA/NeMo-Relay-Plugins/tree/main/plugins/example-python-grpc-worker-plugin"
+
+[source]
+location = "in-tree"
+path = "."
+
+[toolchains]
+python = "3.13"
+
+[commands.build]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "build"]
+cwd = "source"
+
+[commands.test]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "test"]
+cwd = "source"
+
+[commands.package]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
+cwd = "source"
+
+[commands.smoke]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "smoke"]
+cwd = "source"
+
+[artifacts]
+bundle = "bundle"
+manifest = "relay-plugin.toml"

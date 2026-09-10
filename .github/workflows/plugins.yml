@@ -1,0 +1,141 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Plugins
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugins-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_plugins: ${{ steps.plan.outputs.has_plugins }}
+      is_tag: ${{ steps.plan.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked --group test
+      - run: uv run --locked --group test pytest
+      - run: uv run --locked --group test ruff check scripts tests plugins/*/tasks.py
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --locked python -m scripts.plugins plan
+          --event "$GITHUB_EVENT_PATH"
+          --output "$RUNNER_TEMP/plan.json"
+          --github-output "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plugin-plan
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.has_plugins == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: plugin-plan
+          path: ${{ runner.temp }}/plugin-plan
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ endsWith(matrix.platform, 'arm64') && 'arm64' || 'x64' }}
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked
+      - if: matrix.rust != ''
+        env:
+          PLUGIN_RUST: ${{ matrix.rust }}
+        run: rustup toolchain install "$PLUGIN_RUST" --profile minimal
+      - name: Build, test, package, and install the bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_NAME: ${{ matrix.name }}
+          PLUGIN_PLATFORM: ${{ matrix.platform }}
+        run: >-
+          uv run --locked python -m scripts.plugins run "$PLUGIN_NAME"
+          --platform "$PLUGIN_PLATFORM"
+          --plan "$RUNNER_TEMP/plugin-plan/plan.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bundle-${{ matrix.name }}-${{ matrix.platform }}
+          path: dist/${{ matrix.name }}/${{ matrix.platform }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+  required:
+    name: Plugin checks
+    needs: [plan, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every planned build
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          HAS_PLUGINS: ${{ needs.plan.outputs.has_plugins }}
+        run: |
+          test "$PLAN_RESULT" = success
+          if [ "$HAS_PLUGINS" = true ]; then
+            test "$BUILD_RESULT" = success
+          else
+            test "$BUILD_RESULT" = skipped
+          fi
+
+  release:
+    needs: [plan, required]
+    if: startsWith(github.ref, 'refs/tags/') && needs.required.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: bundle-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-assets
+      - name: Create or repair the plugin draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --locked python -m scripts.plugins release "$GITHUB_REF_NAME"
+          --assets "$RUNNER_TEMP/release-assets"
