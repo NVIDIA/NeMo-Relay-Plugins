@@ -210,7 +210,7 @@ fn build_worker() -> (TempDir, PathBuf) {
     let target = TempDir::new().expect("build target directory should be created");
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let status = Command::new(env!("CARGO"))
-        .args(["build", "--locked", "--manifest-path"])
+        .args(["build", "--release", "--locked", "--manifest-path"])
         .arg(manifest)
         .arg("--target-dir")
         .arg(target.path())
@@ -220,7 +220,7 @@ fn build_worker() -> (TempDir, PathBuf) {
         status.success(),
         "cargo build should produce the worker executable"
     );
-    let worker = target.path().join("debug").join(format!(
+    let worker = target.path().join("release").join(format!(
         "nemo-relay-rust-grpc-worker-plugin-example{}",
         std::env::consts::EXE_SUFFIX
     ));

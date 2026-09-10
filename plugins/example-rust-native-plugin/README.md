@@ -30,18 +30,18 @@ plugin in a host, executes middleware, observes its runtime mark, and clears
 the callbacks before unloading the library:
 
 ```bash
-cargo test
-cargo build
+cargo test --release
+cargo build --release
 ```
 
 Copy `relay-plugin.toml` to `relay-plugin.local.toml` and replace
-`<platform-library-file>` with the debug artifact name:
+`<platform-library-file>` with the release artifact name:
 
 | Platform | Library Path |
 |---|---|
-| macOS | `target/debug/libnemo_relay_rust_native_plugin_example.dylib` |
-| Linux | `target/debug/libnemo_relay_rust_native_plugin_example.so` |
-| Windows | `target/debug/nemo_relay_rust_native_plugin_example.dll` |
+| macOS | `target/release/libnemo_relay_rust_native_plugin_example.dylib` |
+| Linux | `target/release/libnemo_relay_rust_native_plugin_example.so` |
+| Windows | `target/release/nemo_relay_rust_native_plugin_example.dll` |
 
 Calculate the artifact digest with `shasum -a 256`, `sha256sum`, or
 `Get-FileHash -Algorithm SHA256`, then replace `<artifact-sha256>` while keeping

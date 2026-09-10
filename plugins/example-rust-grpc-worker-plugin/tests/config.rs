@@ -196,6 +196,6 @@ fn manifest_uses_the_rust_worker_load_contract() {
     assert!(manifest.contains("relay = \">=0.8.0,<1.0\""));
     assert!(manifest.contains("worker_protocol = \"grpc-v1\""));
     assert!(manifest.contains("runtime = \"rust\""));
-    assert!(manifest.contains("entrypoint = \"target/debug/<platform-worker-file>\""));
+    assert!(manifest.contains("entrypoint = \"target/release/<platform-worker-file>\""));
     assert!(!manifest.contains("command ="));
 }

@@ -22,14 +22,14 @@ path = "config.schema.json"
 
 [source]
 # Keep this path aligned with `load.library` when materializing the manifest.
-artifact = "target/debug/<platform-library-file>"
+artifact = "target/release/<platform-library-file>"
 
 [integrity]
 # Replace this placeholder with the SHA-256 digest of `source.artifact`.
 sha256 = "sha256:<artifact-sha256>"
 
 [load]
-# Replace `<platform-library-file>` with the file built by `cargo build` for
-# your platform. Refer to README.md for the expected debug artifact names.
-library = "target/debug/<platform-library-file>"
+# Replace `<platform-library-file>` with the file built by `cargo build --release` for
+# your platform. Refer to README.md for the expected release artifact names.
+library = "target/release/<platform-library-file>"
 symbol = "nemo_relay_register_plugin"

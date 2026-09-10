@@ -179,7 +179,7 @@ fn build_cdylib() -> (TempDir, PathBuf) {
     let target = TempDir::new().expect("build target directory should be created");
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let status = Command::new(env!("CARGO"))
-        .args(["build", "--locked", "--manifest-path"])
+        .args(["build", "--release", "--locked", "--manifest-path"])
         .arg(manifest)
         .arg("--target-dir")
         .arg(target.path())
@@ -189,7 +189,7 @@ fn build_cdylib() -> (TempDir, PathBuf) {
         status.success(),
         "cargo build should produce the native library"
     );
-    let library = target.path().join("debug").join(library_name());
+    let library = target.path().join("release").join(library_name());
     assert!(
         library.exists(),
         "cargo build should produce the expected library"
