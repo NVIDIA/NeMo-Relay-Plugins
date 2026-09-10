@@ -161,6 +161,9 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                     cwd=state,
                     stdout=log,
                     stderr=subprocess.STDOUT,
+                    # Ctrl+C is console-wide on Windows. Give Relay its own
+                    # console so graceful shutdown cannot interrupt the CI runner.
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0,
                 )
                 deadline = time.monotonic() + 60
                 while True:
@@ -197,7 +200,11 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                     raise AssertionError("plugin did not intercept the managed request")
                 if os.name == "nt":
                     subprocess.run(
-                        [str(relay), "--bind", f"127.0.0.1:{port}", "gateway", "stop"],
+                        [
+                            sys.executable,
+                            str(Path(__file__).with_name("windows_console.py")),
+                            str(proc.pid),
+                        ],
                         env=env,
                         cwd=state,
                         check=True,
@@ -206,7 +213,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
                 else:
                     proc.send_signal(signal.SIGINT)
                 proc.wait(timeout=30)
-                if os.name != "nt" and proc.returncode != 0:
+                if proc.returncode != 0:
                     raise AssertionError(
                         "gateway did not shut down cleanly:\n"
                         + log_path.read_text(encoding="utf-8")
