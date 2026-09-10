@@ -21,6 +21,20 @@ from urllib.request import Request, urlopen
 import tomli_w
 
 
+def registered_manifest(document: dict, manifest_path: Path) -> dict:
+    """Find the installed file, including Windows extended-length path aliases."""
+    records = document.get("plugins", {}).get("dynamic", [])
+    for record in records:
+        # Rust canonicalization can retain the Windows \\?\ prefix whereas
+        # Python's resolve() removes it. Compare filesystem identity instead.
+        if Path(record["manifest"]).samefile(manifest_path):
+            return record
+    raise RuntimeError(
+        f"Relay did not register {manifest_path}; "
+        f"registered manifests: {[record['manifest'] for record in records]}"
+    )
+
+
 def smoke(bundle: Path, relay: Path, switchyard: bool = False):
     manifest_path = bundle / "relay-plugin.toml"
     manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
@@ -115,11 +129,7 @@ def smoke(bundle: Path, relay: Path, switchyard: bool = False):
         try:
             upstream = f"http://127.0.0.1:{provider.server_port}/v1"
             document = tomllib.loads(plugins.read_text(encoding="utf-8"))
-            record = next(
-                r
-                for r in document["plugins"]["dynamic"]
-                if Path(r["manifest"]).resolve() == manifest_path.resolve()
-            )
+            record = registered_manifest(document, manifest_path)
             if switchyard:
                 record["config"] = {
                     "switchyard_config": {
