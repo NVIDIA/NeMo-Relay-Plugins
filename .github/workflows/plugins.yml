@@ -3,7 +3,6 @@ name: Plugins
 on:
   pull_request:
   push:
-    branches: ['**']
     tags: ['**']
 
 permissions:

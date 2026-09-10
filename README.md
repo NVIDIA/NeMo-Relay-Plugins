@@ -136,7 +136,7 @@ path = "crates/switchyard-nemo-relay-plugin"
 
 External GitHub Actions use full commit SHAs for their latest stable releases, with exact version tags in comments. When updating an action, resolve the newest stable release to its commit SHA. CI and the initial plugin manifests use Python 3.11, NeMo Relay’s minimum supported version; plugins can select a newer Python when their dependencies require it.
 
-PRs and branch pushes validate every manifest and run shared tooling tests. Plugin-local changes select that plugin. Changes to shared scripts, tests, schemas, workflow code, root dependency locks, or licensing select all plugins. Root documentation alone selects none. Missing comparison history conservatively selects all plugins; renames and deletions are included.
+PRs validate every manifest and run shared tooling tests. Branch pushes do not trigger separate CI runs; tag pushes trigger plugin release validation. Plugin-local changes select that plugin. Changes to shared scripts, tests, schemas, workflow code, root dependency locks, or licensing select all plugins. Root documentation alone selects none. Missing comparison history conservatively selects all plugins; renames and deletions are included.
 
 Every selected plugin builds, tests, packages, and installs on all declared native platforms. Configure branch protection to require **Plugin checks**, the stable aggregate check. Build jobs have read-only permissions. Only the tag release job can write release data.
 
