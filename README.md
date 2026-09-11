@@ -65,6 +65,7 @@ code or license text.
 Formatting checks cover all tracked Python files and all in-tree Rust plugins
 on each commit. This also catches changes caused by new formatter settings or
 tool versions. Untracked Python files are left alone.
+Workflow checks also run on each commit, so changes to actionlint settings are covered.
 
 If a hook changes files, review those changes, stage them, and commit again.
 To run every hook yourself, use:

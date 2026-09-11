@@ -122,8 +122,8 @@ def test_ci_uses_same_required_hooks():
     assert "licenses" in workflow["jobs"]["required"]["needs"]
 
 
-@pytest.mark.parametrize("hook_id", ["ruff-check", "ruff-format", "rust-fmt"])
-def test_formatting_runs_for_settings_changes_and_deletions(hook_id):
+@pytest.mark.parametrize("hook_id", ["ruff-check", "ruff-format", "rust-fmt", "actionlint"])
+def test_configurable_checks_run_for_settings_changes_and_deletions(hook_id):
     config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
     hook = next(hook for repo in config["repos"] for hook in repo["hooks"] if hook["id"] == hook_id)
     assert hook["always_run"]
