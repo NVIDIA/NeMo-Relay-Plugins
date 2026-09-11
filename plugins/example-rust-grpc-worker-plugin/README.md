@@ -5,38 +5,53 @@ SPDX-License-Identifier: Apache-2.0
 
 # Rust gRPC Worker Plugin
 
-Repository release name: `example-rust-grpc-worker-plugin`. Build metadata lives in
-[`release.toml`](release.toml); `relay-plugin.toml` is the runtime manifest.
-From the repository root, run the complete build, tests, packaging, and
-installed-bundle verification with:
+This plugin’s release name is `example-rust-grpc-worker-plugin`.
+[`release.toml`](release.toml) defines its build and release settings.
+`relay-plugin.toml` tells Relay how to load the plugin.
+
+From the repository root, use this command to build and test the plugin, create
+a bundle, and check that the installed bundle works:
 
 ```sh
 uv run --locked python -m scripts.plugins run example-rust-grpc-worker-plugin
 ```
 
-See [UPSTREAM.md](UPSTREAM.md) for the imported source revision and
-[the release guide](../../RELEASE.md) for bundle installation and trust configuration.
+See [UPSTREAM.md](UPSTREAM.md) for the original source commit.
+Use [the release guide](../../RELEASE.md) to install a bundle and set Relay’s trust rules.
 
-This project is the checked Rust worker used by the NeMo Relay plugin authoring
-guide. It validates the shared documentation configuration, registers every
-safe `grpc-v1` surface, exercises continuations and lazy streams, uses
-invocation-scoped codecs, and demonstrates marks and scope-stack cleanup.
+This is the Rust worker from the NeMo Relay plugin authoring guide. It checks
+the example’s settings and uses the safe hooks in `grpc-v1`, the protocol for
+talking to Relay. A hook lets a plugin handle an event or change a request.
 
-Run `cargo test --release` and `cargo build --release` from this directory. The
-configuration and schema tests are order-independent. The lifecycle test builds a fresh worker,
-materializes a digest-checked manifest, activates it through `grpc-v1`, runs
-managed middleware, observes a host-runtime mark, and verifies shutdown. Copy
-`relay-plugin.toml` to `relay-plugin.local.toml`, replace the platform worker
-placeholder with the built executable name, and replace only `<artifact-sha256>`
-with the lowercase hexadecimal digest of the built executable. The manifest value
-keeps its `sha256:` prefix; omit the filename column printed by `shasum -a 256`,
-`sha256sum`, or `Get-FileHash`.
+The example passes requests to the next handler and processes stream items as
+they arrive. It gives each call its own helpers to encode and decode data. It
+also shows how to record event marks and clean up state when a call ends.
 
-The optional `registration_control` group installs one callback-based gate for the
-worker activation. It defaults to disabled, with `kinds: ["subscriber"]`, target
-`documentation-controlled-subscriber`, and reason
-`disabled by documentation plugin`. The callback returns that reason for targets
-whose names start with `documentation-controlled-` and returns `None` to leave
-other matching targets enabled. All three values must be nonempty. Refer to
+Run `cargo test --release` and `cargo build --release` from this folder. The
+settings and schema tests can run in any order. The lifecycle test checks the
+worker from start to finish: it builds a fresh worker, writes a manifest with
+the file’s hash, and starts the worker through `grpc-v1`. It then runs request
+handlers, checks an event mark in the host, and checks shutdown.
+
+To set up a local manifest:
+
+1. Copy `relay-plugin.toml` to `relay-plugin.local.toml`.
+2. Replace the platform worker placeholder with the built executable’s name.
+3. Replace only `<artifact-sha256>` with the executable’s SHA-256 hash in lowercase hexadecimal. Keep the `sha256:` prefix.
+
+You can get the hash with `shasum -a 256`, `sha256sum`, or `Get-FileHash`. Copy
+only the hash, not the filename column.
+
+The optional `registration_control` setting adds a callback that can block
+selected middleware while the worker is active. Middleware handles requests or
+events as they pass through Relay. The control starts disabled, with these defaults:
+
+- Kinds: `["subscriber"]`
+- Target: `documentation-controlled-subscriber`
+- Reason: `disabled by documentation plugin`
+
+The callback blocks targets whose names start with `documentation-controlled-`
+and returns the reason. It returns `None` to leave other matching targets enabled.
+All three values must not be empty. See
 [Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/0.8.4/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
-for effective-name discovery and automatic teardown behavior.
+for how to find target names and how Relay removes the control when the worker stops.

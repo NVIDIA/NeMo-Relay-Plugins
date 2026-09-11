@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Switchyard plugin
 
-This folder independently builds and releases the [Switchyard routing plugin](https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin). The implementation remains in Switchyard; `release.toml` pins its complete source workspace to a commit and selects the plugin crate.
+This folder builds and releases the [Switchyard routing plugin](https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin). Its code lives in the Switchyard repository. The `release.toml` file sets the exact source commit and selects the plugin’s Rust package, called a crate. The build downloads the full Switchyard workspace so the crate can use other packages there.
 
 From this repository's root:
 
@@ -9,8 +9,10 @@ From this repository's root:
 uv run --locked python -m scripts.plugins run switchyard-plugin
 ```
 
-The pipeline runs the upstream plugin tests and packager, then verifies installation, route execution against a loopback provider, shutdown/removal, and integrity rejection using the extracted bundle. All five repository platforms are required.
+This command builds the plugin, runs Switchyard’s plugin tests, and uses its package script to create a bundle. It then extracts and installs the bundle for tests. These tests send a routed request to a local server, check shutdown and removal, and confirm that Relay rejects changed files. CI requires tests to pass on all five supported platforms.
 
-Update `source.sha` deliberately when adopting upstream changes. `source.ref` records tracking intent and never advances the checkout automatically. The release version is maintained here independently of the upstream workspace version. SDK dependencies use the upstream Cargo lockfile; `[relay]` can override only the test host.
+To use newer Switchyard code, update `source.sha` to the commit you want. `source.ref` records the branch or tag you plan to track; it does not update the source on its own.
 
-Bundles preserve Switchyard's `LICENSE` and `NOTICE`. Consult the upstream documentation for deployment configuration and supported behavior.
+The release version here is separate from the Switchyard workspace version. SDK package versions come from Switchyard’s Cargo lockfile. A `[relay]` setting changes only the Relay host used for tests.
+
+Bundles include Switchyard’s `LICENSE` and `NOTICE`, plus `ATTRIBUTIONS-Rust.md` for its Rust packages. See the upstream documentation for deployment settings and supported features.

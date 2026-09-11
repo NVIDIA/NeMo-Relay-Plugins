@@ -1,14 +1,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Releasing one plugin
 
-Each release has exactly one plugin tag and one draft GitHub Release. There is no repository-wide version or batch-tagging command.
+Release one plugin at a time. Each release has one Git tag and one draft GitHub Release. The repository has no shared version or command to tag several plugins at once.
 
 ## Prepare
 
-1. Update the selected plugin's `release.toml` version using SemVer without a leading `v`. Coordinate language-package versions when appropriate; the remote plugin's release version is controlled independently here.
-2. Update dependency locks and, for remote plugins, the committed source SHA as needed. Keep the runtime compatibility declaration accurate.
-3. Merge the change after all required plugin/platform checks pass. The test host defaults to the latest stable Relay release; a `[relay]` tag/SHA override changes only the test host.
-4. Check out the intended merged commit with full history, then validate and push one tag:
+1. Update the plugin’s version in `release.toml`. Use a SemVer version, such as `0.1.0`, without a leading `v`. Update the Python or Rust package version too, if needed. A remote plugin’s release version here can differ from its source project’s version.
+2. Update package lockfiles and the remote source commit (`source.sha`) as needed. Check that the runtime manifest lists the correct supported Relay versions. Update the [attribution files](scripts/licensing/README.md) when packages or sources change.
+3. Merge the change after all required checks pass on every supported platform. Tests use the latest stable Relay release by default. A `[relay]` tag or SHA setting changes only that test host.
+4. Check out the merged commit you want to release, with full Git history. Then check and push one tag:
 
 ```sh
 uv run --locked python -m scripts.plugins validate-tag example-rust-native-plugin-0.1.0
@@ -16,44 +16,54 @@ git tag example-rust-native-plugin-0.1.0
 git push origin refs/tags/example-rust-native-plugin-0.1.0
 ```
 
-The tag must match an existing plugin name and its exact manifest version at that commit. Every tag triggers validation; invalid tags fail CI. The workflow builds only the named plugin, across every supported platform.
+The tag must match a plugin name and the exact version in its manifest at that commit. CI checks every tag and fails if the tag is invalid. It builds the named plugin on every supported platform.
 
 ## Review and publish
 
-After all builds, plugin tests, and installed-bundle smoke tests pass, CI creates a draft release with:
+After all builds and tests pass, including tests of the installed bundle, CI creates a draft release with:
 
 - One installable archive per platform: `.tar.gz` for Linux/macOS or `.zip` for Windows.
-- A `.sha256` sidecar for each archive.
-- A `.json` sidecar recording source and repository commits, the tested Relay revision, toolchains, platform, digest, and verification result.
-- Plugin-specific PR release notes. Remote plugins also link to their source revision and upstream documentation.
+- A `.sha256` file with a checksum for each archive. Use it to check that the downloaded file has not changed.
+- A `.json` file that records the source and repository commits, tested Relay commit, tool versions, platform, file hash, and test result.
+- Release notes that list PRs affecting this plugin. Remote plugins also link to their source commit and upstream documentation.
 
-Notes compare with the nearest ancestral published tag for this plugin. The first release considers repository history. Only merged PRs represented in that interval and affecting the plugin or shared infrastructure are listed. Unrelated PRs and direct commits without a merged PR are not added. File-list pagination failures stop release generation rather than silently producing incomplete notes.
+CI looks back through the tagged commit’s history to find the closest published release tag for the same plugin. It lists merged PRs added since that release. For the first release, it looks through all earlier repository history.
 
-Locally built bundles are marked when the checkout is dirty or a local host override is used. Those bundles remain useful for testing, but the publisher refuses them. Release assets must come from a clean checkout and a verified host selection.
+Notes include only PRs that changed the plugin or shared build files. They leave out unrelated PRs and direct commits with no merged PR. If GitHub cannot return the full list of changed files, release creation fails.
 
-Review the assets and notes, then publish the draft manually in GitHub. CI never publishes it. Avoid editing/publishing a draft while its workflow is running.
+Local bundles are marked if the checkout has uncommitted changes or uses a local Relay executable. You can use these bundles for tests, but the release script rejects them. Release files must come from a clean checkout and a checked test host.
+
+Review the files and notes, then publish the draft yourself in GitHub. CI never publishes it. Wait for the workflow to finish before editing or publishing the draft.
 
 ## Install a bundle
 
-Verify its archive checksum, extract it to a persistent directory, and register the extracted runtime manifest:
+Check the archive’s checksum, then extract it to a folder you plan to keep. Add the plugin to Relay using the extracted runtime manifest:
 
 ```sh
 nemo-relay plugins validate ./example-rust-native-plugin/relay-plugin.toml
 nemo-relay plugins add --user ./example-rust-native-plugin/relay-plugin.toml
 ```
 
-The bundle defaults to disabled. Configure the plugin and host trust policy before enabling it. These bundles include SHA-256 integrity metadata and do not include signing keys or artifact signatures. For a bundle you trust, Relay's per-plugin `attestation = "integrity_only"` policy permits activation; see the [Relay discoverable plugin guide](https://github.com/NVIDIA/NeMo-Relay/blob/main/docs/configure-plugins/discoverable-plugins.mdx). Switchyard additionally requires a deployment configuration; refer to its linked upstream documentation.
+The plugin starts disabled. Set its options and Relay’s trust rules before you enable it. Bundles include SHA-256 hashes to detect changed files. They do not include signing keys or digital signatures.
 
-For Python workers, `plugins add` provisions the managed Python environment from the extracted package source. Retain that source and the runtime manifest at the installed location. Package dependency installation requires access to the configured Python package index.
+For a bundle you trust, set the plugin’s `attestation` policy to `"integrity_only"` to allow it to run. See the [Relay discoverable plugin guide](https://github.com/NVIDIA/NeMo-Relay/blob/main/docs/configure-plugins/discoverable-plugins.mdx). Switchyard also needs a deployment configuration file; see its linked upstream documentation.
+
+For Python workers, `plugins add` creates a Python environment from the extracted source package. Keep that source and the runtime manifest in the install folder. The install step needs access to your Python package index to download required packages.
 
 ## Failure and retry
 
-A failed build, missing artifact, failed runtime test, or incomplete release-note lookup fails the workflow. Build failures do not create a draft. Upload failures may leave an incomplete draft; rerun the failed workflow to repair it after diagnosing the cause.
+The workflow fails if a build or runtime test fails, a release file is missing, or release notes cannot be completed. A build failure does not create a draft. A failed upload may leave a partial draft. Fix the cause, then rerun the failed workflow to complete the draft.
 
-Drafts carry a machine-readable identity marker with the plugin name, version, and tag commit. Retrying updates only a matching draft and verifies the complete uploaded asset set. Published releases, unmanaged drafts, moved tags, and mismatched commit markers are rejected. Do not remove the marker while a draft may need a retry.
+Each draft has a marker with the plugin name, version, and tag commit. On a retry, CI only updates a draft with a matching marker. It then checks that all release files were uploaded.
 
-Use a new plugin version and tag to correct a published release. Keep remote SHAs committed; reruns never advance an upstream branch. The default latest-stable host may advance between workflow runs, and its exact revision is recorded in the assets. Use a tag/SHA host override when a fixed host is required.
+CI refuses to change published releases or drafts it did not create. It also rejects tags that moved to another commit and drafts with a different commit marker. Keep the marker so retries can check the draft.
+
+To fix a published release, create a new plugin version and tag. Save remote source SHAs in the manifest; a retry never switches to newer source code.
+
+The default test host may change if Relay publishes a new stable release between runs. Each run records the exact host commit in the release files. Set a Relay tag or SHA in the manifest if you need the same host on every run.
 
 ## Repository setup
 
-GitHub Actions must permit the pinned actions in `.github/workflows/plugins.yml`, the five configured hosted runner labels, and `contents: write` plus `pull-requests: read` for the release job. The repository's current action policy permits the GitHub-owned actions used here. Require the **Plugin checks** branch-protection check. Repository settings and publication remain maintainer operations; local implementation does not create tags or releases.
+Allow the actions listed in `.github/workflows/plugins.yml` and all five configured GitHub runner types. The release job needs `contents: write` and `pull-requests: read`. This repository’s action policy allows the GitHub-owned actions used here.
+
+In branch protection settings, require **Plugin checks**. Maintainers manage these settings and publish releases. Running the local build and test commands does not create tags or releases.

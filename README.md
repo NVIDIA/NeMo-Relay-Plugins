@@ -1,11 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # NeMo Relay Plugins
 
-Independently built and released plugins for [NVIDIA NeMo Relay](https://github.com/NVIDIA/NeMo-Relay). Each directory under `plugins/` owns its release version, source selection, supported platforms, dependencies, tests, and packaging commands.
+This repository contains plugins for [NVIDIA NeMo Relay](https://github.com/NVIDIA/NeMo-Relay). You can build and release each plugin on its own. Each folder under `plugins/` defines the plugin’s version, source code, supported platforms, required packages, tests, and build steps.
 
 This project is currently not accepting contributions.
 
-The five platform identifiers are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not included. Python workers explicitly exclude Windows ARM64 because their gRPC dependency does not provide a supported wheel there. CI requires every declared combination, totaling 19 jobs for a full build.
+The supported platforms are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not supported. The Python worker does not support Windows ARM64 because its gRPC package has no supported wheel (a prebuilt Python package) for that platform. Automated checks run for every supported plugin and platform pair: 19 jobs for a full build.
+
+A **worker** runs as a separate process. A **native plugin** loads a library into the Relay process. **In-tree** source code lives in this repository. **Remote** source code lives in another repository.
 
 ## Official plugins
 
@@ -23,7 +25,9 @@ The five platform identifiers are `linux-x86_64`, `linux-arm64`, `windows-x86_64
 
 ## Local development
 
-Install Git, Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), and the [GitHub CLI](https://cli.github.com/). Rust plugins also require rustup and the manifest's Rust toolchain. Building a Relay host from source requires the toolchain specified by that Relay revision. GitHub access is needed for host resolution/downloads and remote plugins.
+Install Git, Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), and the [GitHub CLI](https://cli.github.com/). For Rust plugins, also install rustup and the Rust version listed in the plugin’s `release.toml` file. These language tools are called a **toolchain**.
+
+Tests use a Relay executable called the **test host**. You need GitHub access to find and download the host and any remote plugin sources. If the host must be built from source, use the Rust version required by that Relay commit.
 
 From the repository root:
 
@@ -36,9 +40,11 @@ rustup toolchain install 1.96.1 --profile minimal
 uv run --locked python -m scripts.plugins run example-rust-native-plugin
 ```
 
-`run` detects the local platform and executes build, plugin tests, packaging, and a smoke test against an extracted bundle. It refuses cross-platform execution and unsupported targets. Output appears under `dist/<name>/<platform>/`. Temporary source/host checkouts and compilation caches live under `.cache/`.
+`run` detects your platform, builds the plugin, runs its tests, and creates a bundle. A **bundle** is an archive with the files needed to install the plugin. The command then extracts and installs the bundle for a **smoke test**, which checks basic behavior. It only runs for supported platforms and cannot test a different platform from your own.
 
-SDK versions are controlled by each plugin's package manifest and lockfile. The test host defaults to the latest published stable Relay release, resolved once for the CI run. Override only the host in a plugin's `release.toml` when needed:
+Build results go under `dist/<name>/<platform>/`. Downloaded source code and saved build files go under `.cache/`.
+
+Each plugin’s package file and **lockfile** set its SDK versions. The SDK provides tools for writing plugins; the lockfile records exact package versions. Tests use the latest stable Relay release by default. CI, the automated checks in GitHub Actions, selects that host once per run. To choose a different test host, add this to the plugin’s `release.toml`:
 
 ```toml
 [relay]
@@ -46,13 +52,13 @@ tag = "0.8.4"
 # Alternatively use sha = "<full 40-character Relay commit SHA>".
 ```
 
-Tag overrides must name Relay tags. A SHA selects a source build. A tag without downloadable binaries also selects a source build. An incompatible host fails the tests; selection does not silently fall back to an older release or change SDK dependencies.
+The `tag` value must name a Relay tag. A **SHA** is the full ID of a Git commit. Using a SHA makes CI build the host from source. CI also builds from source if a tag has no suitable download. If the host does not work with the plugin, tests fail. CI does not switch to an older host or change the SDK packages.
 
 ## Release manifests
 
-`plugins/<name>/release.toml` describes repository builds and releases. `relay-plugin.toml` describes how Relay loads a packaged plugin. Release names, language package names, and runtime IDs are separate; the release name must match its folder.
+A **manifest** is a file that describes a plugin. `plugins/<name>/release.toml` tells the build scripts how to build and release it. `relay-plugin.toml` tells Relay how to load it. The release name must match the plugin’s folder. Its Python or Rust package name and the ID used inside Relay may differ.
 
-The machine-readable contract is [schemas/release.schema.json](schemas/release.schema.json). The Python tooling validates TOML against that schema and emits JSON for Actions.
+[schemas/release.schema.json](schemas/release.schema.json) defines the allowed fields and values. The Python scripts check each TOML file against these rules and produce JSON for GitHub Actions.
 
 ```toml
 schema_version = 1
@@ -97,35 +103,42 @@ bundle = "bundle"
 manifest = "relay-plugin.toml"
 ```
 
-Commands are argument arrays, not shell expressions. `${VARIABLE}` substitution happens within individual arguments. `cwd = "source"` means the full source checkout root (the plugin source directory for in-tree entries); `cwd = "plugin"` means this repository's registration folder. For remote entries, `SOURCE_DIR` identifies the selected subdirectory within `SOURCE_ROOT`.
+Write each command as a list of arguments. The scripts replace `${VARIABLE}` with its value inside each argument. Commands do not run through a shell.
+
+`cwd` sets the folder where a command runs. `cwd = "source"` uses the source root: the full remote checkout or the in-tree plugin’s source folder. `cwd = "plugin"` uses this repository’s `plugins/<name>/` folder. For remote plugins, `SOURCE_DIR` points to the chosen subfolder within `SOURCE_ROOT`.
 
 | Variable | Value |
 | --- | --- |
-| `REPO_DIR`, `PLUGIN_DIR` | This repository and the plugin's registration folder |
-| `SOURCE_ROOT`, `SOURCE_DIR` | Source checkout root and selected source subdirectory |
-| `OUTPUT_DIR` | Fresh per-plugin/platform working output directory |
-| `PLUGIN_PLATFORM` | Canonical platform identifier |
-| `PYTHON` | Tooling Python executable, with repository tooling dependencies |
-| `PLUGIN_PYTHON` | Python interpreter selected by the plugin toolchain |
-| `RELAY_BIN` | Resolved test-host executable |
-| `CARGO_TARGET_DIR` | Persistent plugin/platform Rust compilation cache |
-| `BUNDLE_DIR` | Extracted archive root, available during smoke tests |
+| `REPO_DIR`, `PLUGIN_DIR` | This repository and its `plugins/<name>/` folder |
+| `SOURCE_ROOT`, `SOURCE_DIR` | Root of the source code and the chosen source folder |
+| `OUTPUT_DIR` | New output folder for this plugin and platform |
+| `PLUGIN_PLATFORM` | Platform name, such as `linux-x86_64` |
+| `PYTHON` | Python used to run this repository’s scripts and their packages |
+| `PLUGIN_PYTHON` | Python version chosen for the plugin |
+| `RELAY_BIN` | Relay executable used for tests |
+| `CARGO_TARGET_DIR` | Saved Rust build files for this plugin and platform |
+| `BUNDLE_DIR` | Folder with the extracted bundle, used by smoke tests |
 
-The package command must create `artifacts.bundle` relative to `OUTPUT_DIR`. The runtime manifest path is relative to that bundle. The runner verifies integrity and archives it, then invokes the smoke command against `BUNDLE_DIR`. Smoke tests must use that extracted distribution, not source/build outputs. A failure in any stage prevents artifact delivery.
+The package command must create the `artifacts.bundle` folder inside `OUTPUT_DIR`. The runtime manifest path starts from that bundle folder. The runner checks the files’ hashes to detect changes, then creates an archive. It extracts the archive into `BUNDLE_DIR` and runs the smoke test there. Tests must use those extracted files. If any step fails, the runner does not deliver the bundle.
 
-Each plugin owns its command implementations. The initial registrations use `tasks.py` for build, test, and packaging, and `smoke_test.py` for their installed-bundle scenarios. Cargo package names, artifact filenames, runtime files, configuration, requests, and behavior assertions belong in those plugin folders. Switchyard's registration invokes its upstream packager from its pinned workspace.
+Each plugin keeps its build, test, and package steps in `tasks.py`. Its `smoke_test.py` checks the installed bundle. Keep package names, output filenames, runtime files, settings, test requests, and expected results in the plugin’s folder. The Switchyard plugin uses the package script from its saved upstream commit. **Upstream** means the source project that this repository builds or copies from.
 
-Shared helpers are optional: `scripts/tasks.py` provides command execution, environment context, platform filename conventions, and manifest digest writing. `scripts/smoke.py` provides a JSON HTTP fixture and the `installed_gateway` context manager for installation, activation, shutdown, tamper rejection, and removal. A plugin supplies its own configuration and gateway arguments, then exercises the yielded gateway URL. Commands may instead use any scripts or tools that satisfy the manifest contract; shared code has no plugin-name dispatch or central recipe registry.
+Plugins can use these shared helpers:
+
+- `scripts/tasks.py` runs commands, reads build settings, chooses filenames for each platform, and writes file hashes into manifests.
+- `scripts/smoke.py` provides a local HTTP server for test data. Its `installed_gateway` helper installs and starts a plugin, then checks shutdown, changed-file rejection, and removal. The plugin supplies settings and startup arguments, then sends test requests to the gateway URL.
+
+You can use other scripts or tools if they follow the manifest rules. Shared scripts do not select special behavior based on a plugin’s name.
 
 ## Adding or updating a plugin
 
-1. Add `plugins/<name>/release.toml`, source or remote reference, documentation, task scripts, and tests. Adding an unrelated plugin requires no changes to shared orchestration, no root Cargo workspace, and no central plugin registry.
-2. Choose `worker` or `native` and declare any platform restrictions. Keep all declared platforms mandatory.
-3. Lock SDK/runtime dependencies independently. Preserve upstream licensing and attribution.
-4. Implement configuration/behavior tests and an installed-bundle test that proves activation, a representative managed request, shutdown/removal, and integrity rejection. The examples use a loopback HTTP provider without credentials.
-5. Run manifest validation, shared tooling tests, and the local plugin pipeline. CI verifies the remaining platforms.
+1. Add `plugins/<name>/release.toml`, source code or a remote source link, documentation, task scripts, and tests. Shared scripts find plugins from these folders, so you do not need to add a central entry or a root Cargo workspace.
+2. Choose `worker` or `native` and list any platform limits. Tests must pass on every platform you list.
+3. Give the plugin its own SDK and runtime package locks. Keep the upstream license and credit files.
+4. Test the plugin’s settings and behavior. Also test an installed bundle: start it, send a typical request, shut it down, and remove it. Check that Relay rejects a bundle whose files were changed. The examples use a local HTTP server that needs no credentials.
+5. Check the manifests, run the shared tests, and run the local plugin build and tests. CI checks the other platforms.
 
-Remote manifests use this source shape:
+For a remote plugin, set its source like this:
 
 ```toml
 [source]
@@ -136,26 +149,38 @@ sha = "8dc891195a5fa71350f5a03c19f9eecc0f9fcb09"
 path = "crates/switchyard-nemo-relay-plugin"
 ```
 
-`sha` is mandatory and authoritative. `ref` records the branch/tag/ref being tracked; CI does not resolve it to newer code. Update the SHA through a reviewed manifest change and test it before releasing. The entire remote repository is fetched so sibling workspace dependencies remain available. The initial remote integration uses a publicly readable repository; private upstream access requires separately provisioned read credentials.
+`sha` is required and sets the exact source commit to build. `ref` records the branch or tag you plan to track. It does not make CI fetch newer code. To update the source, change the SHA in a pull request and test it before release.
+
+CI downloads the full remote repository so the plugin can use other packages in that workspace. Switchyard’s repository is public. For a private source repository, you must provide credentials with read access.
 
 ## CI
 
-External GitHub Actions use full commit SHAs for their latest stable releases, with exact version tags in comments. When updating an action, resolve the newest stable release to its commit SHA. CI and the initial plugin manifests use Python 3.11, NeMo Relay’s minimum supported version; plugins can select a newer Python when their dependencies require it.
+External GitHub Actions use the full commit SHA of their latest stable release. Each action also has a comment with its exact version tag. When you update an action, find the commit SHA for its newest stable release.
 
-PRs validate every manifest and run shared tooling tests. Branch pushes do not trigger separate CI runs; tag pushes trigger plugin release validation. Plugin-local changes select that plugin. Changes to shared scripts, tests, schemas, workflow code, root dependency locks, or licensing select all plugins. Root documentation alone selects none. Missing comparison history conservatively selects all plugins; renames and deletions are included.
+CI and the current plugins use Python 3.11, the oldest version NeMo Relay supports. A plugin can choose a newer Python version if its packages need one.
 
-Every selected plugin builds, tests, packages, and installs on all declared native platforms. Configure branch protection to require **Plugin checks**, the stable aggregate check. Build jobs have read-only permissions. Only the tag release job can write release data.
+Each pull request (PR) checks all manifests and runs the shared tests. A branch push does not start a separate CI run. A tag push starts release checks for the named plugin.
 
-See [RELEASE.md](RELEASE.md) for single-plugin tagging and draft publication. Report security issues using [SECURITY.md](SECURITY.md). Source code is licensed under [Apache-2.0](LICENSE); bundles retain their applicable upstream notices.
+CI selects plugin builds from the changed files:
+
+- A change inside a plugin’s folder selects that plugin.
+- A change to shared scripts, tests, schemas, workflows, root package locks, or license files selects all plugins.
+- A change only to root documentation does not select a plugin build.
+- If Git history is missing, CI selects all plugins.
+
+The file comparison includes renamed and deleted files.
+
+CI builds, tests, packages, and installs each selected plugin on every platform it supports. Each job runs on that platform. In the repository’s branch protection settings, require **Plugin checks**. This check combines the required job results. Build jobs have read-only access. Only the tag release job can write release data.
+
+See [RELEASE.md](RELEASE.md) to tag one plugin and publish its draft release. Follow [SECURITY.md](SECURITY.md) to report security issues. Source code uses the [Apache-2.0 license](LICENSE). Bundles also include the license notices from their source projects.
 
 ## Third-party notices and attribution
 
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) identifies copied sources and the
-attribution inventory for each independently locked project. The attribution files
-use NeMo Relay's format, including dependency versions and full license text.
-The root Python and Rust attribution files aggregate all plugins and repository
-tooling, retaining each distinct dependency version.
-Plugin bundles include their license, notices, and dependency attributions.
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists copied sources and links to
+each project’s **attributions**: credits and license text for the packages it uses.
+These files follow NeMo Relay’s format. The root Python and Rust files combine
+entries from all plugins and repository tools, keeping each package version.
+Every plugin bundle includes its license, notices, and attribution files.
 
-When updating a dependency lockfile or remote source revision, regenerate the
-plugin and aggregate attribution files using [the licensing instructions](scripts/licensing/README.md).
+When you change a package lockfile or remote source commit, update the plugin and
+root attribution files. Follow [the licensing instructions](scripts/licensing/README.md).

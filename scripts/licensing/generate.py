@@ -78,8 +78,8 @@ def aggregate(documents: list[str], language: str) -> str:
     header = (
         collector.ATTRIBUTIONS_MD_LICENSE_PREFIX
         + f"\n# Third-Party Software Attributions{' (Python)' if language == 'Python' else ''}\n\n"
-        + "Aggregated across all plugins and repository tooling, including all locked versions, "
-        + "platforms, and build/test dependencies. Entries retain their individual license terms.\n\n"
+        + "This file lists packages used by all plugins and repository tools. It includes all "
+        + "locked versions and platforms, plus build and test packages. Each package keeps its own license terms.\n\n"
         + "Automatically generated. Regenerate with `uv run --locked python -m scripts.licensing.generate`.\n\n"
     )
     return (

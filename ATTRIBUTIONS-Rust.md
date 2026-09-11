@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Third-Party Software Attributions
 
-Aggregated across all plugins and repository tooling, including all locked versions, platforms, and build/test dependencies. Entries retain their individual license terms.
+This file lists packages used by all plugins and repository tools. It includes all locked versions and platforms, plus build and test packages. Each package keeps its own license terms.
 
 Automatically generated. Regenerate with `uv run --locked python -m scripts.licensing.generate`.
 
