@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: Apache-2.0
+minimum_pre_commit_version: '4.6.2'
+default_stages: [pre-commit]
+# Keep the original security policy verbatim.
+exclude: '^SECURITY\.md$'
+
+repos:
+  - repo: local
+    hooks:
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+        entry: uv run --locked --group test trailing-whitespace-fixer
+        language: system
+        types: [text]
+        exclude: '(^|/)(ATTRIBUTIONS[^/]*\.md|LICENSE[^/]*|NOTICE)$'
+      - id: end-of-file-fixer
+        name: Fix final newlines
+        entry: uv run --locked --group test end-of-file-fixer
+        language: system
+        types: [text]
+        exclude: '(^|/)(ATTRIBUTIONS[^/]*\.md|LICENSE[^/]*|NOTICE)$'
+      - id: check-merge-conflict
+        name: Check merge conflicts
+        entry: uv run --locked --group test check-merge-conflict
+        language: system
+        types: [text]
+      - id: check-yaml
+        name: Check YAML
+        entry: uv run --locked --group test check-yaml
+        language: system
+        types: [yaml]
+      - id: check-toml
+        name: Check TOML
+        entry: uv run --locked --group test check-toml
+        language: system
+        types: [toml]
+      - id: check-json
+        name: Check JSON
+        entry: uv run --locked --group test check-json
+        language: system
+        types: [json]
+      - id: ruff-check
+        name: Lint Python
+        entry: uv run --locked --group test python -m scripts.checks python-lint
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: ruff-format
+        name: Format Python
+        entry: uv run --locked --group test python -m scripts.checks python-format
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: rust-fmt
+        name: Format in-tree Rust plugins
+        entry: uv run --locked python -m scripts.checks rust-fmt
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: runtime-integrity
+        name: Update source artifact hashes
+        entry: uv run --locked python -m scripts.checks runtime-integrity
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: manifests
+        name: Validate plugin manifests
+        entry: uv run --locked python -m scripts.plugins validate
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: lockfiles
+        name: Check package lockfiles
+        entry: uv run --locked python -m scripts.checks lockfiles
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: attributions
+        name: Update aggregate attributions
+        entry: uv run --locked python -m scripts.licensing.generate --inventory-output .cache/license-inventory.json
+        language: system
+        # Run even for deletions, which are absent from pre-commit's file list.
+        always_run: true
+        pass_filenames: false
+      - id: shared-tests
+        name: Test shared tooling
+        entry: uv run --locked --group test pytest -q
+        language: system
+        always_run: true
+        pass_filenames: false
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+    hooks:
+      - id: actionlint
+        always_run: true
+        pass_filenames: false
+        # Keep results independent of optional tools installed on the machine.
+        args: ['-shellcheck=', '-pyflakes=']

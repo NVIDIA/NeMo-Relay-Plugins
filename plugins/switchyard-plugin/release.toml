@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+schema_version = 1
+name = "switchyard-plugin"
+version = "0.2.0"
+type = "native"
+
+[metadata]
+description = "Switchyard routing plugin for NeMo Relay"
+license = "Apache-2.0"
+authors = ["NVIDIA Corporation"]
+repository = "https://github.com/NVIDIA-NeMo/Switchyard"
+documentation = "https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin"
+
+[source]
+location = "remote"
+path = "crates/switchyard-nemo-relay-plugin"
+repository = "https://github.com/NVIDIA-NeMo/Switchyard"
+ref = "main"
+sha = "8dc891195a5fa71350f5a03c19f9eecc0f9fcb09"
+
+[toolchains]
+python = "3.11"
+rust = "1.96.1"
+
+[commands.build]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "build"]
+cwd = "source"
+
+[commands.test]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "test"]
+cwd = "source"
+
+[commands.package]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
+cwd = "source"
+
+[commands.smoke]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/smoke_test.py"]
+cwd = "source"
+
+[artifacts]
+bundle = "bundle"
+manifest = "relay-plugin.toml"

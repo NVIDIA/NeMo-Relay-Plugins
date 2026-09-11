@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Plugins
+on:
+  pull_request:
+  push:
+    tags: ['**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugins-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_plugins: ${{ steps.plan.outputs.has_plugins }}
+      is_tag: ${{ steps.plan.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked --group test
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --locked python -m scripts.plugins plan
+          --event "$GITHUB_EVENT_PATH"
+          --output "$RUNNER_TEMP/plan.json"
+          --github-output "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-plan
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.has_plugins == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: plugin-plan
+          path: ${{ runner.temp }}/plugin-plan
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ endsWith(matrix.platform, 'arm64') && 'arm64' || 'x64' }}
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked
+      - name: Verify Windows console shutdown
+        if: runner.os == 'Windows'
+        run: uv run --locked --group test pytest -q tests/test_smoke.py
+      - if: matrix.rust != ''
+        env:
+          PLUGIN_RUST: ${{ matrix.rust }}
+        run: rustup toolchain install "$PLUGIN_RUST" --profile minimal
+      - name: Install Rust license tool
+        if: matrix.rust != ''
+        env:
+          PLUGIN_RUST: ${{ matrix.rust }}
+        run: cargo "+$PLUGIN_RUST" install cargo-about --version 0.9.1 --locked --features cli
+      - name: Build, test, package, and install the bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_NAME: ${{ matrix.name }}
+          PLUGIN_PLATFORM: ${{ matrix.platform }}
+        run: >-
+          uv run --locked python -m scripts.plugins run "$PLUGIN_NAME"
+          --platform "$PLUGIN_PLATFORM"
+          --plan "$RUNNER_TEMP/plugin-plan/plan.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.name }}-${{ matrix.platform }}
+          path: dist/${{ matrix.name }}/${{ matrix.platform }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+  licenses:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked --group test
+      - run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt
+      - run: cargo +1.96.1 install cargo-about --version 0.9.1 --locked --features cli
+      - name: Run pre-commit checks
+        run: >-
+          uv run --locked --group test pre-commit run --all-files --show-diff-on-failure
+      - name: Compare lockfile licenses
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          LICENSE_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set +e
+          uv run --locked python -m scripts.licensing.license_diff \
+            --base-ref "$LICENSE_DIFF_BASE" \
+            --current-json .cache/license-inventory.json \
+            --output "$RUNNER_TEMP/license-diff.md" 2> "$RUNNER_TEMP/license-diff.status"
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::License diff failed; see the license-report artifact."
+            echo "License diff failed; see the license-report artifact for details." >> "$GITHUB_STEP_SUMMARY"
+          else
+            cat "$RUNNER_TEMP/license-diff.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          cat "$RUNNER_TEMP/license-diff.status" >&2
+          exit "$status"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: license-report
+          include-hidden-files: true
+          path: |
+            .cache/license-inventory.json
+            ${{ runner.temp }}/license-diff.md
+            ${{ runner.temp }}/license-diff.status
+          if-no-files-found: warn
+          retention-days: 14
+
+  required:
+    name: Plugin checks
+    needs: [plan, build, licenses]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every planned build
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          LICENSE_RESULT: ${{ needs.licenses.result }}
+          HAS_PLUGINS: ${{ needs.plan.outputs.has_plugins }}
+        run: |
+          test "$PLAN_RESULT" = success
+          test "$LICENSE_RESULT" = success
+          if [ "$HAS_PLUGINS" = true ]; then
+            test "$BUILD_RESULT" = success
+          else
+            test "$BUILD_RESULT" = skipped
+          fi
+
+  release:
+    needs: [plan, required]
+    if: startsWith(github.ref, 'refs/tags/') && needs.required.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install uv==0.11.32
+      - run: uv sync --locked
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bundle-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-assets
+      - name: Create or repair the plugin draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --locked python -m scripts.plugins release "$GITHUB_REF_NAME"
+          --assets "$RUNNER_TEMP/release-assets"

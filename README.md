@@ -1,364 +1,234 @@
-# NVIDIA PLC OSS Standard Repository Template
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+# NeMo Relay Plugins
 
-This repository provides the standard templates and starting guidance for NVIDIA projects that publish open-source or source-available software. It is a guided superset: keep and customize the sections and files that match your project, and trim anything that does not apply.
+This repository contains plugins for [NVIDIA NeMo Relay](https://github.com/NVIDIA/NeMo-Relay). You can build and release each plugin on its own. Each folder under `plugins/` defines the plugin’s version, source code, supported platforms, required packages, tests, and build steps.
 
-The template set is intentionally more complete than any one project necessarily needs. Before treating the template set as finished, define the project's lifecycle, software maturity, license model, support posture, and contribution policy, then make sure every retained file describes that profile consistently.
+This project is currently not accepting contributions.
 
-This README provides a quick overview of the template and a project README skeleton below the customization separator. For agent instructions on applying the templates, see [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md).
+The supported platforms are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not supported. The Python worker does not support Windows ARM64 because its gRPC package has no supported wheel (a prebuilt Python package) for that platform. Automated checks run for every supported plugin and platform pair: 19 jobs for a full build.
 
-**After customization, remove the template guidance above the separator and retain the completed project README below it.**
+A **worker** runs as a separate process. A **native plugin** loads a library into the Relay process. **In-tree** source code lives in this repository. **Remote** source code lives in another repository.
 
-## Included templates
+Plugins can also use published Python wheels or Rust crates. See
+[package sources](docs/package-sources.md) for `location = "wheel"` and
+`location = "crate"`, locked downloads, packaging, and tests.
 
-This is a map of the reusable files included in this repository, not a list of files every derived repository must retain. Use the agent instructions to determine applicability.
+## Official plugins
 
-### Root
+| Plugin | Type | Source | Supported platforms |
+| --- | --- | --- | --- |
+| [switchyard-plugin](plugins/switchyard-plugin) | Native | Remote Switchyard workspace | All five |
 
-- [README.md](README.md): Project context, status, getting started, usage, support, security, releases, roadmap, and license skeleton
-- [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md): Agent-facing workflow for applying the template; remove it from the derived public repository
-- [LICENSE](LICENSE): License text that every repository must confirm or replace with its exact license
-- [CONTRIBUTING.md](CONTRIBUTING.md): Open, limited, or closed contribution-policy alternatives
-- [SECURITY.md](SECURITY.md): Private vulnerability-reporting guidance
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): Community standards for projects that accept public participation
-- [AGENTS.md](AGENTS.md): Concise, repository-specific context, important paths, and verified commands for coding agents used by contributors or users
-- [RELEASE.md](RELEASE.md): Maintainer instructions for preparing, publishing, verifying, and recovering releases
-- [SUPPORT.md](SUPPORT.md): Detailed support guidance retained only when the README is not sufficient
-- [GOVERNANCE.md](GOVERNANCE.md): Decision and role model retained when the project publishes one
-- [MAINTAINERS.md](MAINTAINERS.md): Current maintainer information, with public contact or role-change guidance when the project publishes it
-- [CITATION.md](CITATION.md): Preferred citation metadata retained when the software is citable
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): Attribution and notice records retained when license or dependency obligations require them
+## Example plugins
 
-### `.github/`
+| Plugin | Type | Source | Supported platforms |
+| --- | --- | --- | --- |
+| [example-python-grpc-worker-plugin](plugins/example-python-grpc-worker-plugin) | Worker | In-tree Python | Linux x86_64/ARM64, Windows x86_64, macOS ARM64 |
+| [example-rust-grpc-worker-plugin](plugins/example-rust-grpc-worker-plugin) | Worker | In-tree Rust | All five |
+| [example-rust-native-plugin](plugins/example-rust-native-plugin) | Native | In-tree Rust | All five |
 
-- [ISSUE_TEMPLATE/01_bug_report.yml](.github/ISSUE_TEMPLATE/01_bug_report.yml): Form for accepted public bug reports
-- [ISSUE_TEMPLATE/02_feature_request.yml](.github/ISSUE_TEMPLATE/02_feature_request.yml): Form for accepted public feature requests
-- [ISSUE_TEMPLATE/03_documentation_request.yml](.github/ISSUE_TEMPLATE/03_documentation_request.yml): Form for accepted public documentation requests
-- [ISSUE_TEMPLATE/config.yml](.github/ISSUE_TEMPLATE/config.yml): Issue chooser configuration, blank-issue policy, and question and security contact links ([GitHub documentation](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository))
-- [PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md): Pull request prompts for projects that accept pull requests ([GitHub documentation](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/creating-a-pull-request-template-for-your-repository))
-- [CODEOWNERS](.github/CODEOWNERS): Optional automatic review requests for specific users or teams based on the files changed
+## Local development
 
-## Common project-specific additions
+Install Git, Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), and the [GitHub CLI](https://cli.github.com/). For Rust plugins, also install rustup and the Rust version listed in the plugin’s `release.toml` file. These language tools are called a **toolchain**.
 
-The template does not prescribe a complete software layout. Add the documentation, automation, packaging, tests, examples, and other files the project needs. Common additions include:
+Tests use a Relay executable called the **test host**. You need GitHub access to find and download the host and any remote plugin sources. If the host must be built from source, use the Rust version required by that Relay commit.
 
-- `docs/`
-- `examples/`
-- `tests/`
-- `scripts/`
-- Configured `.github/workflows/`
-- Container or development environment: `Dockerfile`, `docker/`, or `.devcontainer/`
-- Build and package files:
-  - Python: `pyproject.toml`, `setup.cfg`, `setup.py`, `requirements.txt`, or `environment.yml`
-  - C++: `CMakeLists.txt`, `cmake/`, or `vcpkg.json`
-- Repository hygiene: `.gitignore`, `.gitattributes`, `.editorconfig`, `.pre-commit-config.yaml`, or `.clang-format`
-- Project-specific license or notice files when the included starters do not apply
+From the repository root:
 
-## Usage for new NVIDIA repositories
-
-1. Clone [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template).
-2. Point your coding agent at the agent-facing [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md).
-3. Replace `__PROJECT__` throughout the retained templates, `__ORG__` in `.github/CODEOWNERS` and retained GitHub URLs, and every remaining `__PLACEHOLDER_LIKE_THIS__` with accurate project-specific content.
-4. Keep, customize, or remove conditional sections and files according to your project's needs. Conditional content blocks use `<!-- TEMPLATE:BEGIN ... -->` and `<!-- TEMPLATE:END ... -->`. **Use when** identifies conditional content, **Choose** identifies alternatives, and **Write** identifies author guidance that must be replaced with project content. Remove unselected content blocks, then remove all visible author guidance and conditional markers from the retained content.
-5. Add any project-specific content or files the software needs; this template is a framework meant to be built on.
-6. Configure repository settings and channels to match the written policies.
-
-**Remove before publishing**
-
-Remove `TEMPLATE_INSTRUCTIONS.md`, the template guidance above the README separator, and any files or sections that do not apply. From retained files, remove author guidance, conditional markers, setup comments, and unresolved placeholders.
-
-**Files requiring little or no customization**
-
-- `SECURITY.md`, after confirming the standard NVIDIA reporting path remains applicable
-- `CODE_OF_CONDUCT.md`, when the project accepts public participation, after replacing its project placeholder
-- Applicable issue and pull request templates, after resolving placeholders, links, and repository settings
-
-**Files you must customize or remove**
-
-- `README.md`
-- `CONTRIBUTING.md`
-- `LICENSE` and legal contribution files
-- `.github/CODEOWNERS`: Customize and retain when pull requests should automatically request review from specific users or teams based on the files changed; otherwise remove.
-- `AGENTS.md`: Customize with concise repository context, important paths, and verified commands when contributors or users may use coding agents; otherwise remove.
-- `RELEASE.md`: Customize with the verified maintainer release process, or remove.
-- `SUPPORT.md` and `CITATION.md`: Customize or remove.
-- `MAINTAINERS.md` and `GOVERNANCE.md`: Include only when relevant to the project.
-- Notice files: Include only when required.
-
-**Release and roadmap surfaces**
-
-- Release history: When the project publishes releases, use GitHub Releases as the canonical public release history.
-- Release process: Use `RELEASE.md` when maintainers need a documented release procedure, and keep it aligned with release automation.
-- Public roadmap: Use a GitHub Project for an actively tracked roadmap or a pinned issue for a concise roadmap, and link it from the project README.
-
-## Usage for existing NVIDIA repositories
-
-Follow the same profile and consistency process, but preserve accurate project-specific material and merge only the applicable sections and files into the existing repository. Build on the template with anything else the project needs.
-
-<!-- REMOVE THE LINE BELOW AND EVERYTHING ABOVE AFTER CUSTOMIZATION -->
--------------------------------------------------------------------------------
-
-# __PROJECT__
-
-<!-- TEMPLATE:BEGIN id="readme.badges" condition="project-has-verifiable-public-status-information" -->
-> **Use when:** The project has maintained CI, release, coverage, or other public status information that a badge would help readers verify.
->
-> **Write:** Add relevant badges such as CI status, license, latest release, or coverage.
-
-<!-- badges go here -->
-<!-- TEMPLATE:END id="readme.badges" -->
-
-> **Write:** In one sentence, state what the software is, what it does, and who it is for.
-
-<!-- TEMPLATE:BEGIN id="readme.snapshot-notice" condition="lifecycle=snapshot" -->
-> **Use when:** The repository is a snapshot.
-
-> [!IMPORTANT]
-> This repository is a fixed snapshot provided as-is. It is not actively maintained. Issues and pull requests might not receive a response.
-
-<!-- TEMPLATE:END id="readme.snapshot-notice" -->
-
-<!-- TEMPLATE:BEGIN id="readme.maintenance-notice" condition="lifecycle=maintenance-only" -->
-> **Use when:** The project is maintenance-only.
-
-> [!NOTE]
-> This project is in maintenance-only mode. Only __SUPPORTED_MAINTENANCE_SCOPE__ is planned; new feature development is not planned.
-
-<!-- TEMPLATE:END id="readme.maintenance-notice" -->
-
-<!-- TEMPLATE:BEGIN id="readme.archive-notice" condition="lifecycle=archived" -->
-> **Use when:** The repository is archived.
-
-> [!WARNING]
-> This repository is archived and no longer maintained. __LINK_TO_SUCCESSOR_OR_FINAL_STATUS__.
-
-<!-- TEMPLATE:END id="readme.archive-notice" -->
-
-<!-- TEMPLATE:BEGIN id="readme.source-available-notice" condition="license-model=source-available" -->
-> **Use when:** The software is source available rather than open source.
-
-> [!IMPORTANT]
-> This software is source available, not open source. Review the [source-available usage terms](#source-available-usage-terms) before using, modifying, or distributing it.
-
-<!-- TEMPLATE:END id="readme.source-available-notice" -->
-
-## Overview
-
-> **Write:** Explain what the software does, why it is useful, and its main capabilities. Where relevant, cover the intended audience, common use cases, and important scope details. Include a concise statement describing the project's status and summarizing its support and contribution policies.
-
-### Features
-
-> **Write:** List key capabilities in bullets or a concise table.
-
-## Getting started
-
-> **Write:** Provide the shortest path to install or obtain the software and run something meaningful. If no runnable quick start applies, direct readers to the most useful next step.
-
-```bash
-# Install or obtain the software
-__QUICK_START_INSTALL_COMMAND__
-
-# Run a minimal example
-__QUICK_START_COMMAND__
+```sh
+uv sync --locked --group test
+rustup toolchain install 1.96.1 --profile minimal --component rustfmt
+cargo +1.96.1 install cargo-about --version 0.9.1 --locked --features cli
+uv run --locked --group test pre-commit install
+uv run --locked --group test pre-commit run --all-files
+uv run --locked --group test pytest
+uv run --locked python -m scripts.plugins validate
+uv run --locked python -m scripts.plugins list
+uv run --locked python -m scripts.plugins run example-rust-native-plugin
 ```
 
-Expected result:
+`run` detects your platform, builds the plugin, runs its tests, and creates a bundle. A **bundle** is an archive with the files needed to install the plugin. The command then extracts and installs the bundle for a **smoke test**, which checks basic behavior. It only runs for supported platforms and cannot test a different platform from your own.
 
-```text
-__EXPECTED_OUTPUT__
+Build results go under `dist/<name>/<platform>/`. Downloaded source code and saved build files go under `.cache/`.
+
+### Checks before each commit
+
+The `pre-commit install` command adds a **Git hook**: a check that runs when you
+commit. Run this command once in each clone. The hook uses the versions saved in
+`uv.lock`. It also installs a pinned version of actionlint, which checks GitHub
+Actions files. The first run needs network access and may take a few minutes.
+
+The hooks format Python and Rust, check file syntax, check package lockfiles,
+validate release manifests, and run the shared tests. When formatting changes a
+source artifact, they update its hash in the runtime manifest. Each commit also
+rebuilds the root attribution files from all plugin locks, including after file deletions.
+This part needs network access and can take a few minutes.
+These checks need the Rust tools installed above. They do not edit remote source
+code or license text.
+
+Formatting checks cover all tracked Python files and all in-tree Rust plugins
+on each commit. This also catches changes caused by new formatter settings or
+tool versions. Untracked Python files are left alone.
+Workflow checks also run on each commit, so changes to actionlint settings are covered.
+
+If a hook changes files, review those changes, stage them, and commit again.
+To run every hook yourself, use:
+
+```sh
+uv run --locked --group test pre-commit run --all-files --show-diff-on-failure
 ```
 
-## Requirements
+If a package lockfile is out of date, run `uv lock` or `cargo update` in the
+folder that owns it. Review the package changes before staging the lockfile.
+Use `cargo update -p <package>` to update one Rust package.
 
-> **Write:** List only prerequisites and remove categories that do not apply.
+CI runs the same hooks on all tracked files. Plugin builds and installed-bundle
+tests still run in the separate platform jobs. Before pushing a plugin change,
+run its full local pipeline with `uv run --locked python -m scripts.plugins run <name>`.
 
-- OS and architecture: __SUPPORTED_OS_AND_ARCHITECTURE__
-- Runtime or compiler: __RUNTIME_OR_COMPILER_VERSIONS__
-- NVIDIA dependencies: __NVIDIA_DEPENDENCIES_OR_NOT_APPLICABLE__
-- GPU, driver, and CUDA requirements: __GPU_DRIVER_CUDA_REQUIREMENTS_OR_NOT_APPLICABLE__
-- Known-good environment: __KNOWN_GOOD_ENVIRONMENT__
+Each plugin’s package file and **lockfile** set its SDK versions. The SDK provides tools for writing plugins; the lockfile records exact package versions.
 
-## Installation
+Tests use the latest stable Relay release by default. The three examples now need the unpublished Relay 0.9 API, so their manifests select a host built from source. Their SDK locks also use an exact upstream Git commit. See each example’s `UPSTREAM.md` for that commit.
 
-> **Write:** Explain the recommended installation method and any supported alternatives. If the software is not distributed or installed separately, explain that.
+CI, the automated checks in GitHub Actions, selects the host once per run. To choose a different test host, add this to the plugin’s `release.toml`:
 
-```bash
-__INSTALL_COMMANDS__
+```toml
+[relay]
+sha = "65eb82bf3d788986512246abf7f8ab7a520f28d9"
+# Or use tag = "<a compatible published Relay tag>".
 ```
 
-## Usage
+The `tag` value must name a Relay tag. A **SHA** is the full ID of a Git commit. Using a SHA makes CI build the host from source. CI also builds from source if a tag has no suitable download. If the host does not work with the plugin, tests fail. CI does not switch to an older host or change the SDK packages.
 
-> **Write:** Show a realistic, copy-pastable example of the software's primary use.
+## Release manifests
 
-```text
-__MINIMAL_USAGE_EXAMPLE__
+A **manifest** is a file that describes a plugin. `plugins/<name>/release.toml` tells the build scripts how to build and release it. `relay-plugin.toml` tells Relay how to load it. The release name must match the plugin’s folder. Its Python or Rust package name and the ID used inside Relay may differ.
+
+[schemas/release.schema.json](schemas/release.schema.json) defines the allowed fields and values. The Python scripts check each TOML file against these rules and produce JSON for GitHub Actions.
+
+```toml
+schema_version = 1
+name = "my-plugin"
+version = "0.1.0"
+type = "native" # or "worker"
+# Omit platforms to select all five.
+platforms = ["linux-x86_64", "linux-arm64"]
+
+[metadata]
+description = "My Relay plugin"
+license = "Apache-2.0"
+authors = ["Plugin maintainers"]
+# Optional repository, documentation, and arbitrary additional metadata.
+
+[source]
+location = "in-tree"
+path = "."
+
+[toolchains]
+python = "3.11"
+rust = "1.96.1" # optional for non-Rust plugins
+
+[commands.build]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "build"]
+cwd = "source"
+
+[commands.test]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "test"]
+cwd = "source"
+
+[commands.package]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
+cwd = "source"
+
+[commands.smoke]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/smoke_test.py"]
+cwd = "plugin"
+
+[artifacts]
+bundle = "bundle"
+manifest = "relay-plugin.toml"
 ```
 
-<!-- TEMPLATE:BEGIN id="readme.telemetry" condition="software-collects-telemetry-or-usage-data" -->
-## Telemetry and data collection
+Write each command as a list of arguments. The scripts replace `${VARIABLE}` with its value inside each argument. Commands do not run through a shell.
 
-> **Use when:** The software collects telemetry or usage data.
+`cwd` sets the folder where a command runs. `cwd = "source"` uses the source root: the full remote checkout or the in-tree plugin’s source folder. `cwd = "plugin"` uses this repository’s `plugins/<name>/` folder. For remote plugins, `SOURCE_DIR` points to the chosen subfolder within `SOURCE_ROOT`.
 
-- Data collected: __DATA_COLLECTED__
-- Data not collected: __DATA_NOT_COLLECTED__
-- Purpose: __COLLECTION_PURPOSE__
-- Disable or opt out: __OPT_OUT_INSTRUCTIONS__
-- More information: __TELEMETRY_DOCUMENTATION__
-<!-- TEMPLATE:END id="readme.telemetry" -->
+| Variable | Value |
+| --- | --- |
+| `REPO_DIR`, `PLUGIN_DIR` | This repository and its `plugins/<name>/` folder |
+| `SOURCE_ROOT`, `SOURCE_DIR` | Root of the source code and the chosen source folder |
+| `OUTPUT_DIR` | New output folder for this plugin and platform |
+| `PLUGIN_PLATFORM` | Platform name, such as `linux-x86_64` |
+| `PYTHON` | Python used to run this repository’s scripts and their packages |
+| `PLUGIN_PYTHON` | Python version chosen for the plugin |
+| `RELAY_BIN` | Relay executable used for tests |
+| `CARGO_TARGET_DIR` | Saved Rust build files for this plugin and platform |
+| `BUNDLE_DIR` | Folder with the extracted bundle, used by smoke tests |
 
-## Documentation
+The package command must create the `artifacts.bundle` folder inside `OUTPUT_DIR`. The runtime manifest path starts from that bundle folder. The runner checks the files’ hashes to detect changes, then creates an archive. It extracts the archive into `BUNDLE_DIR` and runs the smoke test there. Tests must use those extracted files. If any step fails, the runner does not deliver the bundle.
 
-> **Write:** Keep only links to documentation surfaces the project actually maintains.
+Each plugin keeps its build, test, and package steps in `tasks.py`. Its `smoke_test.py` checks the installed bundle. Keep package names, output filenames, runtime files, settings, test requests, and expected results in the plugin’s folder. The Switchyard plugin uses the package script from its saved upstream commit. **Upstream** means the source project that this repository builds or copies from.
 
-- Documentation and API reference: __DOCUMENTATION_HOME__
-- Examples and tutorials: __EXAMPLES_LINK__
+Plugins can use these shared helpers:
 
-<!-- TEMPLATE:BEGIN id="readme.architecture" condition="architecture-context-is-useful" -->
-## Architecture
+- `scripts/tasks.py` runs commands, reads build settings, chooses filenames for each platform, and writes file hashes into manifests.
+- `scripts/smoke.py` provides a local HTTP server for test data. Its `installed_gateway` helper installs and starts a plugin, then checks shutdown, changed-file rejection, and removal. The plugin supplies settings and startup arguments, then sends test requests to the gateway URL.
 
-> **Use when:** The software benefits from an architecture overview.
->
-> **Write:** Describe the main components and how they relate. Include or link to a diagram when it makes the architecture materially easier to understand.
+You can use other scripts or tools if they follow the manifest rules. Shared scripts do not select special behavior based on a plugin’s name.
 
-<!-- TEMPLATE:END id="readme.architecture" -->
+## Adding or updating a plugin
 
-<!-- TEMPLATE:BEGIN id="readme.performance" condition="project-publishes-performance-claims" -->
-## Performance
+1. Add `plugins/<name>/release.toml`, source code or a remote source link, documentation, task scripts, and tests. Shared scripts find plugins from these folders, so you do not need to add a central entry or a root Cargo workspace.
+2. Choose `worker` or `native` and list any platform limits. Tests must pass on every platform you list.
+3. Give the plugin its own SDK and runtime package locks. Keep the upstream license and credit files.
+4. Test the plugin’s settings and behavior. Also test an installed bundle: start it, send a typical request, shut it down, and remove it. Check that Relay rejects a bundle whose files were changed. The examples use a local HTTP server that needs no credentials.
+5. Check the manifests, run the shared tests, and run the local plugin build and tests. CI checks the other platforms.
 
-> **Use when:** The project publishes performance claims or benchmarks.
->
-> **Write:** Summarize benchmarks and link to detailed results. Include the hardware, software, and methodology used.
+For a remote plugin, set its source like this:
 
-<!-- TEMPLATE:END id="readme.performance" -->
+```toml
+[source]
+location = "remote"
+repository = "https://github.com/NVIDIA-NeMo/Switchyard"
+ref = "main"
+sha = "8dc891195a5fa71350f5a03c19f9eecc0f9fcb09"
+path = "crates/switchyard-nemo-relay-plugin"
+```
 
-## Support and contributions
+`sha` is required and sets the exact source commit to build. `ref` records the branch or tag you plan to track. It does not make CI fetch newer code. To update the source, change the SHA in a pull request and test it before release.
 
-- Bug reports: __BUG_REPORT_PATH_OR_NOT_ACCEPTED__
-- Questions and support: __SUPPORT_PATH_OR_NOT_PROVIDED__
-- Feature requests: __FEATURE_REQUEST_PATH_OR_NOT_ACCEPTED__
-- Response expectations: __SUPPORT_RESPONSE_EXPECTATION__
-- Contribution scope: __CONTRIBUTION_SCOPE_OR_NOT_ACCEPTED__
+CI downloads the full remote repository so the plugin can use other packages in that workspace. Switchyard’s repository is public. For a private source repository, you must provide credentials with read access.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the project's contribution policy and participation guidance.
+## CI
 
-<!-- TEMPLATE:BEGIN id="readme.code-of-conduct" condition="project-accepts-public-participation" -->
-> **Use when:** The project accepts public participation through contributions, bug reports, questions, or community channels.
+External GitHub Actions use the full commit SHA of their latest stable release. Each action also has a comment with its exact version tag. When you update an action, find the commit SHA for its newest stable release.
 
-All project participants must follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-<!-- TEMPLATE:END id="readme.code-of-conduct" -->
+CI and the current plugins use Python 3.11, the oldest version NeMo Relay supports. A plugin can choose a newer Python version if its packages need one.
 
-<!-- TEMPLATE:BEGIN id="readme.support-file" condition="project-maintains-support-file" -->
-> **Use when:** The project maintains `SUPPORT.md` with additional support guidance.
+Each pull request (PR) checks all manifests and runs the shared tests. A branch push does not start a separate CI run. A tag push starts release checks for the named plugin.
 
-See [SUPPORT.md](SUPPORT.md) for additional support guidance.
-<!-- TEMPLATE:END id="readme.support-file" -->
+CI selects plugin builds from the changed files:
 
-<!-- TEMPLATE:BEGIN id="readme.reproducibility" condition="repository-accompanies-research-or-contains-reproducible-results" -->
-## Reproducing published results
+- A change inside a plugin’s folder selects that plugin.
+- A change to shared scripts, tests, schemas, workflows, root package locks, or license files selects all plugins.
+- A change only to root documentation does not select a plugin build.
+- If Git history is missing, CI selects all plugins.
 
-> **Use when:** The repository accompanies published research or contains results intended to be reproduced.
+The file comparison includes renamed and deleted files.
 
-- Reference commit or release: __REFERENCE_COMMIT_OR_RELEASE__
-- Environment: __REPRODUCIBILITY_ENVIRONMENT__
-- Hardware: __KNOWN_GOOD_HARDWARE__
-- Command: `__REPRODUCTION_COMMAND__`
-- Expected result: __EXPECTED_REPRODUCTION_RESULT__
-<!-- TEMPLATE:END id="readme.reproducibility" -->
+CI builds, tests, packages, and installs each selected plugin on every platform it supports. Each job runs on that platform. In the repository’s branch protection settings, require **Plugin checks**. This check combines the required job results. Build jobs have read-only access. Only the tag release job can write release data.
 
-<!-- TEMPLATE:BEGIN id="readme.limitations" condition="known-limitations-or-research-profile" -->
-## Known limitations
+See [RELEASE.md](RELEASE.md) to tag one plugin and publish its draft release. Follow [SECURITY.md](SECURITY.md) to report security issues. Source code uses the [Apache-2.0 license](LICENSE). Bundles also include the license notices from their source projects.
 
-> **Use when:** The software has known limitations worth highlighting or the repository accompanies published research.
->
-> **Write:** Describe known limitations, failure modes, unsupported environments, and any expected variability or drift.
+## Third-party notices and attribution
 
-<!-- TEMPLATE:END id="readme.limitations" -->
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists copied sources and links to
+each project’s **attributions**: credits and license text for the packages it uses.
+These files follow NeMo Relay’s format. The root Python and Rust files combine
+entries from all plugins and repository tools, keeping each package version.
+Each package script generates its plugin's attribution files from its locked
+dependencies and includes them in the bundle. Per-plugin attribution files are
+not committed. Every bundle still includes its license and source notices.
 
-<!-- TEMPLATE:BEGIN id="readme.releases" condition="project-publishes-github-releases" -->
-## Releases
-
-> **Use when:** The project publishes releases through GitHub Releases.
-
-See [GitHub Releases](__GITHUB_RELEASES_URL__) for release notes.
-
-<!-- TEMPLATE:BEGIN id="readme.release-process" condition="release-process-file-retained" -->
-See [RELEASE.md](RELEASE.md) for the maintainer release process.
-<!-- TEMPLATE:END id="readme.release-process" -->
-<!-- TEMPLATE:END id="readme.releases" -->
-
-<!-- TEMPLATE:BEGIN id="readme.roadmap" condition="project-publishes-public-roadmap" -->
-## Roadmap
-
-> **Use when:** The project publishes a public roadmap.
->
-> **Write:** Link to the project's canonical GitHub Project or pinned roadmap issue. Do not duplicate changing status or dates here.
-
-<!-- TEMPLATE:END id="readme.roadmap" -->
-
-<!-- TEMPLATE:BEGIN id="readme.governance" condition="project-publishes-governance-or-maintainer-information" -->
-## Governance and maintainers
-
-> **Use when:** The project publishes governance or maintainer information. Keep only the links to files the project publishes.
-
-- Governance: [GOVERNANCE.md](GOVERNANCE.md)
-- Maintainers: [MAINTAINERS.md](MAINTAINERS.md)
-<!-- TEMPLATE:END id="readme.governance" -->
-
-## Security
-
-Do not report security vulnerabilities through public GitHub issues. See [SECURITY.md](SECURITY.md) for the reporting path.
-
-<!-- TEMPLATE:BEGIN id="readme.community" condition="project-provides-community-or-maintainer-contact-route" -->
-## Community
-
-> **Use when:** The project provides a public community channel or another way to communicate with maintainers.
->
-> **Write:** List public community channels. If none exist, state where questions should go or that no public question channel is provided.
-
-<!-- TEMPLATE:BEGIN id="readme.community-meetings" condition="project-holds-public-community-meetings" -->
-### Community meetings
-
-> **Use when:** The project holds public meetings that contributors or users can join.
->
-> **Write:** State the cadence, time, and time zone, and link to joining details and past recordings.
-
-<!-- TEMPLATE:END id="readme.community-meetings" -->
-<!-- TEMPLATE:END id="readme.community" -->
-
-<!-- TEMPLATE:BEGIN id="readme.references" condition="project-has-relevant-references" -->
-## References
-
-> **Use when:** The project has references that materially help readers understand the software and its context.
->
-> **Write:** List the papers, specifications, upstream projects, or other sources that help readers understand the software and its context.
-
-<!-- TEMPLATE:END id="readme.references" -->
-
-<!-- TEMPLATE:BEGIN id="readme.citation" condition="software-is-citable" -->
-## Citation
-
-> **Use when:** The software has a preferred citation.
->
-> **Write:** Provide the preferred citation and, when applicable, BibTeX. Keep it consistent with [CITATION.md](CITATION.md).
-
-<!-- TEMPLATE:END id="readme.citation" -->
-
-## License
-
-The software in this repository is licensed under __LICENSE_NAME__. See [LICENSE](LICENSE) for details.
-
-<!-- TEMPLATE:BEGIN id="readme.source-available-terms" condition="license-model=source-available" -->
-### Source-available usage terms
-
-> **Use when:** The software is source available rather than open source.
-
-This is a source-available license, not an open-source license. The summary below does not replace the license terms.
-
-- Permitted uses: __PERMITTED_USES__
-- Restricted or prohibited uses: __RESTRICTED_USES__
-<!-- TEMPLATE:END id="readme.source-available-terms" -->
-
-<!-- TEMPLATE:BEGIN id="readme.notices" condition="software-distribution-includes-required-notices" -->
-> **Use when:** The software distribution requires copyright or third-party notices.
-
-See __NOTICE_FILE_LINK__ for copyright and third-party attribution notices.
-<!-- TEMPLATE:END id="readme.notices" -->
+When you change a package lockfile or remote source commit, update the root
+attribution files. Follow [the licensing instructions](scripts/licensing/README.md).

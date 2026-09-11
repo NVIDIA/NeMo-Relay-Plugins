@@ -1,0 +1,9 @@
+NVIDIA NeMo Relay Plugins
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This project is licensed under the Apache License, Version 2.0. See LICENSE.
+
+This repository includes examples and attribution tooling adapted from NVIDIA
+NeMo Relay. The Switchyard plugin is built from a pinned upstream checkout.
+See THIRD_PARTY_NOTICES.md for source provenance and dependency attributions.
+Each third-party component remains subject to its own license and notices.
