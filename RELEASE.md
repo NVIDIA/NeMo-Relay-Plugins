@@ -48,7 +48,7 @@ The plugin starts disabled. Set its options and Relay’s trust rules before you
 
 For a bundle you trust, set the plugin’s `attestation` policy to `"integrity_only"` to allow it to run. See the [Relay discoverable plugin guide](https://github.com/NVIDIA/NeMo-Relay/blob/main/docs/configure-plugins/discoverable-plugins.mdx). Switchyard also needs a deployment configuration file; see its linked upstream documentation.
 
-For Python workers, `plugins add` creates a Python environment from the extracted source package. Keep that source and the runtime manifest in the install folder. The install step needs access to your Python package index to download required packages.
+For Python workers, `plugins add` creates a Python environment from the extracted source package. Keep that source and the runtime manifest in the install folder. The install step needs access to your Python package index to download required packages. The current Python example also needs Git and access to GitHub to install its SDK from the locked source commit.
 
 ## Failure and retry
 

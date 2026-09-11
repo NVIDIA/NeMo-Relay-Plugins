@@ -708,12 +708,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## nemo-relay-plugin (0.8.4)
+## nemo-relay-plugin (0.9.0)
 
 ### Licenses
 License: `Apache-2.0`
 
-  - `https://github.com/NVIDIA/NeMo-Relay/blob/6f0caf7aefc1363943badf51a643d4c5e52f020a/LICENSE`:
+  - `https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/LICENSE`:
 ```
                                  Apache License
                            Version 2.0, January 2004

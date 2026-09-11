@@ -28,7 +28,7 @@ It gives each call its own codec helpers, which encode and decode data. It also
 changes stream items as they arrive and cleans up event marks, call state,
 isolated stacks, and cancelled tasks.
 
-The worker uses Relay 0.8’s `grpc-v1` result format. When it passes a tool call to
+The worker uses Relay 0.9’s `grpc-v1` result format. When it passes a tool call to
 the next handler, it returns `ToolExecutionResult`. Its execution hook keeps the
 application’s result and stores the original annotation in worker metadata. It
 also adds pending marks owned by Relay.
@@ -56,7 +56,7 @@ is optional: `registration_control.enabled` defaults to `false`. Its other defau
 The callback blocks targets whose names start with `documentation-controlled-`
 and returns the reason. It returns `None` to leave other matching targets enabled.
 The kinds, target name, and reason must not be empty. See
-[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/0.8.4/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 for the full rules, including which plugin owns each control.
 
 To try the plugin from this folder, create temporary Relay settings, add the
@@ -79,3 +79,10 @@ also deletes the Python environment that Relay created.
 nemo-relay --config "$relay_config" plugins remove examples.python_grpc_worker
 rm -rf -- "$relay_tmp"
 ```
+
+## SDK and test host
+
+This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+packages are published, its package locks use an exact Git commit. Its
+`release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
+for the source version and local changes.

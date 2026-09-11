@@ -114,6 +114,8 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
         lambda selector, github: calls.append(selector) or {"sha": "a" * 40},
     )
     manifests = discover(catalog)
+    for manifest in manifests.values():
+        manifest["relay"] = {}
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
     assert len(plan["matrix"]["include"]) == 19
     assert len(calls) == 1
@@ -122,6 +124,23 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     assert set(plan["hosts"]) == {NAME}
     with pytest.raises(ValueError):
         make_plan(manifests, {}, "push", "refs/tags/nope", "a" * 40, None, catalog)
+
+
+def test_plan_resolves_shared_override_and_default_host_separately(catalog, monkeypatch):
+    calls = []
+
+    def resolve(selector, github):
+        calls.append(selector)
+        return {"sha": selector.get("sha", "a" * 40)}
+
+    monkeypatch.setattr("scripts.plugins.resolve_host", resolve)
+    manifests = discover(catalog)
+    for index, manifest in enumerate(manifests.values()):
+        manifest["relay"] = {"sha": "b" * 40} if index < 2 else {}
+    plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
+    assert calls == [{"sha": "b" * 40}, {}]
+    for name, manifest in manifests.items():
+        assert plan["hosts"][name]["sha"] == manifest["relay"].get("sha", "a" * 40)
 
 
 def test_commands_are_argument_arrays():

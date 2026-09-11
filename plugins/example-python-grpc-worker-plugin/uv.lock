@@ -76,14 +76,11 @@ wheels = [
 
 [[package]]
 name = "nemo-relay-plugin"
-version = "0.8.4"
-source = { registry = "https://pypi.org/simple" }
+version = "0.9.0"
+source = { git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=65eb82bf3d788986512246abf7f8ab7a520f28d9#65eb82bf3d788986512246abf7f8ab7a520f28d9" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f1/d1/df49ede16cd6d9490efe8eb38356ac379e62f98e458a463493bd903917af/nemo_relay_plugin-0.8.4-py3-none-any.whl", hash = "sha256:6b786d0f759e9cf4841af3d3ba0377805419a932b84ea0237b2d461f03b385b7", size = 41151, upload-time = "2026-09-05T00:10:13.122Z" },
 ]
 
 [[package]]
@@ -101,7 +98,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "nemo-relay-plugin", specifier = "==0.8.4" }]
+requires-dist = [{ name = "nemo-relay-plugin", git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=65eb82bf3d788986512246abf7f8ab7a520f28d9" }]
 
 [package.metadata.requires-dev]
 test = [

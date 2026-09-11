@@ -11,7 +11,7 @@ version = "0.1.0"
 description = "Example Python gRPC worker plugin for NeMo Relay"
 requires-python = ">=3.11"
 dependencies = [
-  "nemo-relay-plugin==0.8.4",
+  "nemo-relay-plugin @ git+https://github.com/NVIDIA/NeMo-Relay.git@65eb82bf3d788986512246abf7f8ab7a520f28d9#subdirectory=python/plugin",
 ]
 
 [dependency-groups]

@@ -1,10 +1,20 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Original source
 
-This example was copied from NVIDIA NeMo Relay release 0.8.4 at commit
-`6f0caf7aefc1363943badf51a643d4c5e52f020a`.
+This example was synced from NVIDIA NeMo Relay's `main` branch at commit
+`65eb82bf3d788986512246abf7f8ab7a520f28d9`.
 
-[View the original source](https://github.com/NVIDIA/NeMo-Relay/tree/6f0caf7aefc1363943badf51a643d4c5e52f020a/examples/python-grpc-worker-plugin).
+[View the original source](https://github.com/NVIDIA/NeMo-Relay/tree/65eb82bf3d788986512246abf7f8ab7a520f28d9/examples/python-grpc-worker-plugin).
 
 The release name is specific to this repository. The original package name and
 the plugin ID used by Relay have not changed.
+
+This source needs Relay 0.9. Its SDK packages are not published yet, so the
+package files and lockfiles use the exact Git commit above. The `release.toml`
+file selects the same commit for the test host. These are separate settings;
+changing the host does not update the SDK lock.
+
+Local changes require Python tests on every supported platform and keep the
+lockfile independent of parent project settings. They also add this
+repository's packaging and bundle tests.
+The README uses plain language and links to the build and release guides here.

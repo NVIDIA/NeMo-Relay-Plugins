@@ -44,12 +44,16 @@ uv run --locked python -m scripts.plugins run example-rust-native-plugin
 
 Build results go under `dist/<name>/<platform>/`. Downloaded source code and saved build files go under `.cache/`.
 
-Each plugin’s package file and **lockfile** set its SDK versions. The SDK provides tools for writing plugins; the lockfile records exact package versions. Tests use the latest stable Relay release by default. CI, the automated checks in GitHub Actions, selects that host once per run. To choose a different test host, add this to the plugin’s `release.toml`:
+Each plugin’s package file and **lockfile** set its SDK versions. The SDK provides tools for writing plugins; the lockfile records exact package versions.
+
+Tests use the latest stable Relay release by default. The three examples now need the unpublished Relay 0.9 API, so their manifests select a host built from source. Their SDK locks also use an exact upstream Git commit. See each example’s `UPSTREAM.md` for that commit.
+
+CI, the automated checks in GitHub Actions, selects the host once per run. To choose a different test host, add this to the plugin’s `release.toml`:
 
 ```toml
 [relay]
-tag = "0.8.4"
-# Alternatively use sha = "<full 40-character Relay commit SHA>".
+sha = "65eb82bf3d788986512246abf7f8ab7a520f28d9"
+# Or use tag = "<a compatible published Relay tag>".
 ```
 
 The `tag` value must name a Relay tag. A **SHA** is the full ID of a Git commit. Using a SHA makes CI build the host from source. CI also builds from source if a tag has no suitable download. If the host does not work with the plugin, tests fail. CI does not switch to an older host or change the SDK packages.

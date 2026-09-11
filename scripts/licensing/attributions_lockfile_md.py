@@ -19,6 +19,7 @@ from functools import lru_cache
 import zipfile
 from email.parser import Parser
 from pathlib import Path
+from urllib.parse import parse_qs, quote, urlsplit
 from typing import Any, TypedDict, cast
 
 ATTRIBUTIONS_MD_LICENSE_PREFIX = """<!--
@@ -185,8 +186,8 @@ def _normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _lockfile_registry_packages() -> dict[str, dict[str, Any]]:
-    """Return {normalized_name: package_entry} for all third-party registry packages in uv.lock."""
+def _lockfile_external_packages() -> dict[str, dict[str, Any]]:
+    """Return locked external Python packages, including exact Git sources."""
     import tomllib
 
     with open(ROOT / "uv.lock", "rb") as f:
@@ -196,7 +197,7 @@ def _lockfile_registry_packages() -> dict[str, dict[str, Any]]:
         for pkg in cast(list[dict[str, Any]], lock.get("package", []))
         if pkg.get("name")
         and pkg.get("version")
-        and cast(dict[str, Any], pkg.get("source", {})).get("registry")
+        and any(key in pkg.get("source", {}) for key in ("registry", "git"))
     }
 
 
@@ -928,7 +929,10 @@ def _python_upstream_licenses(pkg: dict[str, Any]) -> list[tuple[str, str]]:
 
 def _lockfile_only_python_package(pkg: dict[str, Any]) -> RenderedPythonPackage:
     """Render one package from the locked artifact metadata in uv.lock."""
-    license_name, license_texts = _artifact_metadata_from_lockfile(pkg)
+    if "git" in pkg.get("source", {}):
+        license_name, license_texts = _git_python_license(pkg)
+    else:
+        license_name, license_texts = _artifact_metadata_from_lockfile(pkg)
     if not license_texts:
         license_texts = _python_upstream_licenses(pkg)
     if not license_texts:
@@ -941,6 +945,34 @@ def _lockfile_only_python_package(pkg: dict[str, Any]) -> RenderedPythonPackage:
         license_name=license_name,
         license_texts=license_texts,
     )
+
+
+def _git_python_license(pkg: dict[str, Any]) -> tuple[str, list[tuple[str, str]]]:
+    """Read a Git package's metadata and notices at the commit recorded by uv.lock."""
+    source = urlsplit(pkg["source"]["git"].removeprefix("git+"))
+    repository = f"{source.scheme}://{source.netloc}{source.path.removesuffix('.git')}"
+    sha = source.fragment
+    subdir = parse_qs(source.query).get("subdirectory", [""])[0].strip("/")
+    if (
+        not re.fullmatch(r"https://github.com/[\w.-]+/[\w.-]+", repository)
+        or not re.fullmatch(r"[0-9a-f]{40}", sha)
+        or ".." in subdir.split("/")
+        or "\\" in subdir
+    ):
+        raise ValueError(f"Python Git package needs an exact supported source: {pkg['name']}")
+    path = (subdir + "/" if subdir else "") + "pyproject.toml"
+    url = f"https://raw.githubusercontent.com{source.path.removesuffix('.git')}/{sha}/{quote(path, safe='/')}"
+    with urllib.request.urlopen(url, timeout=30) as response:
+        project = tomllib.loads(response.read().decode("utf-8"))["project"]
+    if (
+        _normalize_package_name(project["name"]) != _normalize_package_name(pkg["name"])
+        or project.get("version") != pkg["version"]
+    ):
+        raise ValueError(f"Git package identity differs from uv.lock: {pkg['name']}")
+    license_name = project.get("license")
+    if not isinstance(license_name, str) or not license_name.strip():
+        raise ValueError(f"Git package lacks a license expression: {pkg['name']}")
+    return license_name, _upstream_licenses(repository, sha, subdir)
 
 
 def _lockfile_python_packages(
@@ -958,8 +990,8 @@ def _lockfile_python_packages(
 
 def _python_attribution_packages() -> list[RenderedPythonPackage]:
     """Return Python attribution packages directly from uv.lock artifacts."""
-    lockfile_pkgs = _lockfile_registry_packages()
-    own_name = ""  # Local projects are already excluded by registry-source filtering.
+    lockfile_pkgs = _lockfile_external_packages()
+    own_name = ""  # Local projects are already excluded by external-source filtering.
     packages = _lockfile_python_packages(lockfile_pkgs, own_name=own_name)
     packages.sort(key=lambda r: (str(r["name"]).lower(), str(r["version"])))
     return packages
@@ -967,8 +999,8 @@ def _python_attribution_packages() -> list[RenderedPythonPackage]:
 
 def _python_license_inventory() -> list[LicenseInventoryEntry]:
     """Return minimal Python dependency license rows directly from uv.lock artifacts."""
-    lockfile_pkgs = _lockfile_registry_packages()
-    own_name = ""  # Local projects are already excluded by registry-source filtering.
+    lockfile_pkgs = _lockfile_external_packages()
+    own_name = ""  # Local projects are already excluded by external-source filtering.
     return [
         _rendered_python_package_inventory(pkg)
         for pkg in _lockfile_python_packages(lockfile_pkgs, own_name=own_name)

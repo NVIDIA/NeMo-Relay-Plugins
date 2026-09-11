@@ -17,7 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize("lock", [ROOT / "uv.lock", *ROOT.glob("plugins/*/uv.lock")])
 def test_python_attributions_cover_locked_registry_versions(lock):
     packages = tomllib.loads(lock.read_text())["package"]
-    expected = {(p["name"], p["version"]) for p in packages if "registry" in p["source"]}
+    expected = {
+        (p["name"], p["version"])
+        for p in packages
+        if any(key in p["source"] for key in ("registry", "git"))
+    }
     path = (
         ROOT / "scripts/licensing/ATTRIBUTIONS-Python.md"
         if lock.parent == ROOT
@@ -144,3 +148,44 @@ def test_workspace_crates_are_excluded_from_dependency_attributions():
         )
         is None
     )
+
+
+def test_python_git_license_uses_locked_commit_without_building(monkeypatch):
+    sha = "a" * 40
+    package = {
+        "name": "external-sdk",
+        "version": "2.0.0",
+        "source": {
+            "git": f"https://github.com/owner/repo.git?subdirectory=python%2Fsdk&rev=main#{sha}"
+        },
+    }
+    urls = []
+
+    def download(url, **kwargs):
+        urls.append(url)
+        return io.BytesIO(b'[project]\nname = "external-sdk"\nversion = "2.0.0"\nlicense = "MIT"\n')
+
+    monkeypatch.setattr(attribution.urllib.request, "urlopen", download)
+    sources = []
+
+    def licenses(repository, commit, subdir):
+        sources.append((repository, commit, subdir))
+        return [("upstream/LICENSE", "Copyright Authors\nLicense text")]
+
+    monkeypatch.setattr(attribution, "_upstream_licenses", licenses)
+    result = attribution._lockfile_only_python_package(package)
+    assert result["license_name"] == "MIT"
+    assert "Copyright Authors" in result["license_texts"][0][1]
+    assert urls == [f"https://raw.githubusercontent.com/owner/repo/{sha}/python/sdk/pyproject.toml"]
+    assert sources == [("https://github.com/owner/repo", sha, "python/sdk")]
+    package["version"] = "3.0.0"
+    with pytest.raises(ValueError, match="identity differs"):
+        attribution._git_python_license(package)
+
+
+@pytest.mark.parametrize("revision", ["main", "", "a" * 39])
+def test_python_git_license_rejects_unlocked_source(revision):
+    with pytest.raises(ValueError, match="exact supported source"):
+        attribution._git_python_license(
+            {"name": "example", "source": {"git": f"https://github.com/owner/repo#{revision}"}}
+        )

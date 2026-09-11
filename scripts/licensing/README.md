@@ -28,9 +28,11 @@ the hashes in `uv.lock`. Cargo commands use `--locked` to keep package versions 
 
 If a package archive has no license text, the generator looks for it in the
 source repository listed by the package. Rust's `.cargo_vcs_info.json` records
-the commit used to publish the package. For Python, the generator finds the
-commit for the exact version tag. It downloads license text from that commit
-and adds source links to the generated entry.
+the commit used to publish the package. For Python packages from a registry,
+the generator finds the commit for the exact version tag. For a Python Git
+dependency, it reads the package metadata and license at the commit recorded
+in `uv.lock`. It downloads license text from that commit and adds source links
+to the generated entry.
 
 There are no separate package license files to maintain by hand. The generator
 also has no special rules for named packages. It fails if it cannot find the
