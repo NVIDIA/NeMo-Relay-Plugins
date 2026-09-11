@@ -30,6 +30,7 @@ SHARED_FILES = {
     "ATTRIBUTIONS-Rust.md",
     ".python-version",
     ".gitattributes",
+    ".pre-commit-config.yaml",
 }
 
 

@@ -38,11 +38,21 @@ There are no separate package license files to maintain by hand. The generator
 also has no special rules for named packages. It fails if it cannot find the
 source or license text.
 
-Commit the generated files along with package or source updates. CI checks that
-all plugin and root attribution files are up to date with:
+Commit the generated files along with package or source updates. To check that
+all plugin and root attribution files are up to date without editing them, run:
 
 ```sh
 uv run --locked python -m scripts.licensing.generate --check
+```
+
+The pre-commit attribution hook runs the same generator on each commit, including
+commits that delete files. It updates the attribution files for you. Review and
+stage those changes before committing again. CI runs every hook
+and fails if generated files differ from the committed copies. To run just this
+hook locally, use:
+
+```sh
+uv run --locked --group test pre-commit run attributions --all-files
 ```
 
 Every bundle must include a nonempty `ATTRIBUTIONS*.md` file. Each plugin's

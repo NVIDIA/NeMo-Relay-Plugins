@@ -18,6 +18,7 @@ Local changes require Python tests on every supported platform and keep the
 lockfile independent of parent project settings. They also add this
 repository's packaging and bundle tests.
 The README uses plain language and links to the build and release guides here.
+Pre-commit formats the copied source using this repository's style.
 
 On Windows, the worker ignores console Ctrl+C. Relay receives that signal and
 asks the worker to shut down after it finishes its work. This keeps the worker

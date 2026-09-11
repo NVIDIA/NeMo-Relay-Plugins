@@ -33,16 +33,49 @@ From the repository root:
 
 ```sh
 uv sync --locked --group test
+rustup toolchain install 1.96.1 --profile minimal --component rustfmt
+cargo +1.96.1 install cargo-about --version 0.9.1 --locked --features cli
+uv run --locked --group test pre-commit install
+uv run --locked --group test pre-commit run --all-files
 uv run --locked --group test pytest
 uv run --locked python -m scripts.plugins validate
 uv run --locked python -m scripts.plugins list
-rustup toolchain install 1.96.1 --profile minimal
 uv run --locked python -m scripts.plugins run example-rust-native-plugin
 ```
 
 `run` detects your platform, builds the plugin, runs its tests, and creates a bundle. A **bundle** is an archive with the files needed to install the plugin. The command then extracts and installs the bundle for a **smoke test**, which checks basic behavior. It only runs for supported platforms and cannot test a different platform from your own.
 
 Build results go under `dist/<name>/<platform>/`. Downloaded source code and saved build files go under `.cache/`.
+
+### Checks before each commit
+
+The `pre-commit install` command adds a **Git hook**: a check that runs when you
+commit. Run this command once in each clone. The hook uses the versions saved in
+`uv.lock`. It also installs a pinned version of actionlint, which checks GitHub
+Actions files. The first run needs network access and may take a few minutes.
+
+The hooks format Python and Rust, check file syntax, check package lockfiles,
+validate release manifests, and run the shared tests. When formatting changes a
+source artifact, they update its hash in the runtime manifest. Each commit also
+rebuilds the plugin and root attribution files, including after file deletions.
+This part needs network access and can take a few minutes.
+These checks need the Rust tools installed above. They do not edit remote source
+code or license text.
+
+If a hook changes files, review those changes, stage them, and commit again.
+To run every hook yourself, use:
+
+```sh
+uv run --locked --group test pre-commit run --all-files --show-diff-on-failure
+```
+
+If a package lockfile is out of date, run `uv lock` or `cargo update` in the
+folder that owns it. Review the package changes before staging the lockfile.
+Use `cargo update -p <package>` to update one Rust package.
+
+CI runs the same hooks on all tracked files. Plugin builds and installed-bundle
+tests still run in the separate platform jobs. Before pushing a plugin change,
+run its full local pipeline with `uv run --locked python -m scripts.plugins run <name>`.
 
 Each plugin’s package file and **lockfile** set its SDK versions. The SDK provides tools for writing plugins; the lockfile records exact package versions.
 

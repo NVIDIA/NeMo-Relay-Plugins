@@ -149,6 +149,7 @@ def main():
     if args.inventory_output:
         import json
 
+        args.inventory_output.parent.mkdir(parents=True, exist_ok=True)
         args.inventory_output.write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
     if stale:
         raise SystemExit("Stale attributions; regenerate and commit: " + ", ".join(stale))

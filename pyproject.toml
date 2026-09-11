@@ -5,7 +5,13 @@ requires-python = ">=3.11"
 dependencies = ["jsonschema==4.26.0", "tomli-w==1.2.0"]
 
 [dependency-groups]
-test = ["pytest==9.1.1", "ruff==0.16.7", "pyyaml==6.0.3"]
+test = [
+    "pytest==9.1.1",
+    "ruff==0.16.7",
+    "pyyaml==6.0.3",
+    "pre-commit==4.6.2",
+    "pre-commit-hooks==6.0.0",
+]
 
 [tool.uv]
 prerelease = "disallow"

@@ -84,7 +84,9 @@ class ExamplePythonWorker(WorkerPlugin):
 
     def register(self, ctx: PluginContext, config: Json) -> None:
         diagnostics = validate_config(config)
-        errors = [diagnostic for diagnostic in diagnostics if diagnostic.level == DiagnosticLevel.ERROR]
+        errors = [
+            diagnostic for diagnostic in diagnostics if diagnostic.level == DiagnosticLevel.ERROR
+        ]
         if errors:
             raise ValueError(errors[0].message)
         settings = normalized_config(config)
@@ -99,9 +101,14 @@ class ExamplePythonWorker(WorkerPlugin):
             reason = cast(str, registration_control["reason"])
             ctx.register_conditional_middleware_guardrail(
                 "documentation_registration_control",
-                {RuntimeRegistrationKind(kind) for kind in cast(list[str], registration_control["kinds"])},
+                {
+                    RuntimeRegistrationKind(kind)
+                    for kind in cast(list[str], registration_control["kinds"])
+                },
                 cast(str, registration_control["registration_name"]),
-                lambda _kinds, name: reason if name.startswith("documentation-controlled-") else None,
+                lambda _kinds, name: (
+                    reason if name.startswith("documentation-controlled-") else None
+                ),
             )
 
         if observe["enabled"]:
@@ -128,7 +135,9 @@ class ExamplePythonWorker(WorkerPlugin):
                     {"event": event.get("name"), "tag": tag},
                 )
 
-        def sanitize_event(_event: dict[str, Any], fields: EventSanitizeFields) -> EventSanitizeFields:
+        def sanitize_event(
+            _event: dict[str, Any], fields: EventSanitizeFields
+        ) -> EventSanitizeFields:
             metadata = _redact(fields.get("metadata") or {}, redact_keys)
             if not isinstance(metadata, dict):
                 metadata = {"original": metadata}
@@ -160,12 +169,22 @@ class ExamplePythonWorker(WorkerPlugin):
                 await codec.decode(response)
             return _redact(response, redact_keys)
 
-        ctx.register_event_metadata_injector("documentation_event_metadata_injector", inject_event_metadata)
+        ctx.register_event_metadata_injector(
+            "documentation_event_metadata_injector", inject_event_metadata
+        )
         ctx.register_subscriber("documentation_subscriber", subscriber)
-        ctx.register_mark_sanitize_guardrail("documentation_mark_sanitizer", sanitize_event, priority=10)
-        ctx.register_scope_sanitize_start_guardrail("documentation_scope_start_sanitizer", sanitize_event, priority=10)
-        ctx.register_scope_sanitize_end_guardrail("documentation_scope_end_sanitizer", sanitize_event, priority=10)
-        ctx.register_tool_sanitize_request_guardrail("documentation_tool_request_sanitizer", sanitize_tool, priority=10)
+        ctx.register_mark_sanitize_guardrail(
+            "documentation_mark_sanitizer", sanitize_event, priority=10
+        )
+        ctx.register_scope_sanitize_start_guardrail(
+            "documentation_scope_start_sanitizer", sanitize_event, priority=10
+        )
+        ctx.register_scope_sanitize_end_guardrail(
+            "documentation_scope_end_sanitizer", sanitize_event, priority=10
+        )
+        ctx.register_tool_sanitize_request_guardrail(
+            "documentation_tool_request_sanitizer", sanitize_tool, priority=10
+        )
         ctx.register_tool_sanitize_response_guardrail(
             "documentation_tool_response_sanitizer", sanitize_tool, priority=10
         )
@@ -242,11 +261,15 @@ class ExamplePythonWorker(WorkerPlugin):
                 ],
             )
 
-        ctx.register_tool_conditional_execution_guardrail("documentation_tool_policy", tool_policy, priority=10)
+        ctx.register_tool_conditional_execution_guardrail(
+            "documentation_tool_policy", tool_policy, priority=10
+        )
         ctx.register_tool_request_intercept(
             "documentation_tool_request", tool_request, priority=priority, break_chain=break_chain
         )
-        ctx.register_llm_conditional_execution_guardrail("documentation_llm_policy", llm_policy, priority=10)
+        ctx.register_llm_conditional_execution_guardrail(
+            "documentation_llm_policy", llm_policy, priority=10
+        )
         ctx.register_llm_request_intercept(
             "documentation_llm_request", llm_request, priority=priority, break_chain=break_chain
         )
@@ -256,7 +279,9 @@ class ExamplePythonWorker(WorkerPlugin):
         if not settings["emit_marks"] and not settings["emit_isolated_scope"]:
             return
 
-        async def runtime_events(context: ToolExecutionContext, next_call: Any) -> ToolExecutionInterceptOutcome:
+        async def runtime_events(
+            context: ToolExecutionContext, next_call: Any
+        ) -> ToolExecutionInterceptOutcome:
             await _emit_runtime_events(ctx, tag, settings)
             downstream = await next_call.call(context.args)
             return ToolExecutionInterceptOutcome(
@@ -264,14 +289,18 @@ class ExamplePythonWorker(WorkerPlugin):
                 annotation=downstream.annotation,
             )
 
-        ctx.register_tool_execution_intercept("documentation_runtime_events", runtime_events, priority=0)
+        ctx.register_tool_execution_intercept(
+            "documentation_runtime_events", runtime_events, priority=0
+        )
 
     @staticmethod
     def _register_execution(ctx: PluginContext, tag: str, execution: dict[str, Json]) -> None:
         priority = cast(int, execution["priority"])
         emit_pending_marks = cast(bool, execution["emit_pending_marks"])
 
-        async def tool_execution(context: ToolExecutionContext, next_call: Any) -> ToolExecutionInterceptOutcome:
+        async def tool_execution(
+            context: ToolExecutionContext, next_call: Any
+        ) -> ToolExecutionInterceptOutcome:
             result: ToolExecutionResult = await next_call.call(context.args)
             marks = (
                 [
@@ -315,8 +344,12 @@ class ExamplePythonWorker(WorkerPlugin):
                 else:
                     yield chunk
 
-        ctx.register_tool_execution_intercept("documentation_tool_execution", tool_execution, priority=priority)
-        ctx.register_llm_execution_intercept("documentation_llm_execution", llm_execution, priority=priority)
+        ctx.register_tool_execution_intercept(
+            "documentation_tool_execution", tool_execution, priority=priority
+        )
+        ctx.register_llm_execution_intercept(
+            "documentation_llm_execution", llm_execution, priority=priority
+        )
         ctx.register_llm_stream_execution_intercept(
             "documentation_llm_stream_execution", llm_stream_execution, priority=priority
         )
@@ -324,24 +357,42 @@ class ExamplePythonWorker(WorkerPlugin):
 
 def validate_config(config: Json) -> list[ConfigDiagnostic]:
     if not isinstance(config, dict):
-        return [_diagnostic(DiagnosticLevel.ERROR, "invalid_config", None, "plugin config must be a JSON object")]
+        return [
+            _diagnostic(
+                DiagnosticLevel.ERROR, "invalid_config", None, "plugin config must be a JSON object"
+            )
+        ]
 
     diagnostics: list[ConfigDiagnostic] = []
     allowed_top = {"tag", *GROUP_FIELDS}
     for key in config.keys() - allowed_top:
-        diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "unknown_field", key, f"unknown field '{key}'"))
+        diagnostics.append(
+            _diagnostic(DiagnosticLevel.ERROR, "unknown_field", key, f"unknown field '{key}'")
+        )
     if "tag" in config and (not isinstance(config["tag"], str) or not config["tag"]):
-        diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "invalid_tag", "tag", "tag must be a non-empty string"))
+        diagnostics.append(
+            _diagnostic(
+                DiagnosticLevel.ERROR, "invalid_tag", "tag", "tag must be a non-empty string"
+            )
+        )
 
     for group, fields in GROUP_FIELDS.items():
         value = config.get(group)
         if value is not None and not isinstance(value, dict):
-            diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "invalid_group", group, f"{group} must be an object"))
+            diagnostics.append(
+                _diagnostic(
+                    DiagnosticLevel.ERROR, "invalid_group", group, f"{group} must be an object"
+                )
+            )
             continue
         if isinstance(value, dict):
             for key in value.keys() - fields:
                 path = f"{group}.{key}"
-                diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "unknown_field", path, f"unknown field '{path}'"))
+                diagnostics.append(
+                    _diagnostic(
+                        DiagnosticLevel.ERROR, "unknown_field", path, f"unknown field '{path}'"
+                    )
+                )
 
     settings = normalized_config(config)
     for path in (
@@ -355,22 +406,38 @@ def validate_config(config: Json) -> list[ConfigDiagnostic]:
         "registration_control.enabled",
     ):
         if not isinstance(_path(settings, path), bool):
-            diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be a boolean"))
+            diagnostics.append(
+                _diagnostic(
+                    DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be a boolean"
+                )
+            )
     for path in ("requests.priority", "execution.priority"):
         value = _path(settings, path)
         if isinstance(value, bool) or not isinstance(value, int):
-            diagnostics.append(_diagnostic(DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be an integer"))
+            diagnostics.append(
+                _diagnostic(
+                    DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be an integer"
+                )
+            )
     for path in ("requests.blocked_tools", "requests.blocked_models", "observe.redact_keys"):
         value = _path(settings, path)
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             diagnostics.append(
-                _diagnostic(DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be an array of strings")
+                _diagnostic(
+                    DiagnosticLevel.ERROR,
+                    "invalid_type",
+                    path,
+                    f"{path} must be an array of strings",
+                )
             )
     kinds = _path(settings, "registration_control.kinds")
     if (
         not isinstance(kinds, list)
         or not kinds
-        or not all(isinstance(item, str) and item in {kind.value for kind in RuntimeRegistrationKind} for item in kinds)
+        or not all(
+            isinstance(item, str) and item in {kind.value for kind in RuntimeRegistrationKind}
+            for item in kinds
+        )
     ):
         diagnostics.append(
             _diagnostic(
@@ -384,13 +451,23 @@ def validate_config(config: Json) -> list[ConfigDiagnostic]:
         value = _path(settings, path)
         if not isinstance(value, str) or not value:
             diagnostics.append(
-                _diagnostic(DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be a non-empty string")
+                _diagnostic(
+                    DiagnosticLevel.ERROR,
+                    "invalid_type",
+                    path,
+                    f"{path} must be a non-empty string",
+                )
             )
     for path in ("registration_control.registration_name", "registration_control.reason"):
         value = _path(settings, path)
         if not isinstance(value, str) or not value:
             diagnostics.append(
-                _diagnostic(DiagnosticLevel.ERROR, "invalid_type", path, f"{path} must be a non-empty string")
+                _diagnostic(
+                    DiagnosticLevel.ERROR,
+                    "invalid_type",
+                    path,
+                    f"{path} must be a non-empty string",
+                )
             )
     mode = _path(settings, "requests.mode")
     if mode not in {"observe", "enforce"}:
@@ -449,7 +526,10 @@ async def _emit_runtime_events(ctx: PluginContext, tag: str, settings: dict[str,
 
 def _redact(value: Json, redact_keys: list[str]) -> Json:
     if isinstance(value, dict):
-        return {key: "[REDACTED]" if key in redact_keys else _redact(item, redact_keys) for key, item in value.items()}
+        return {
+            key: "[REDACTED]" if key in redact_keys else _redact(item, redact_keys)
+            for key, item in value.items()
+        }
     if isinstance(value, list):
         return [_redact(item, redact_keys) for item in value]
     return value

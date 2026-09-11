@@ -24,7 +24,12 @@ import pytest
 
 import grpc  # noqa: F401 — Required on every declared platform.
 
-from nemo_relay_plugin import PluginContext, PluginRuntime, ToolExecutionContext, ToolExecutionResult  # noqa: E402
+from nemo_relay_plugin import (
+    PluginContext,
+    PluginRuntime,
+    ToolExecutionContext,
+    ToolExecutionResult,
+)  # noqa: E402
 
 EXAMPLE_ROOT = Path(__file__).parents[1]
 MODULE_NAME = "nemo_relay_python_grpc_worker_example.worker"
@@ -101,7 +106,9 @@ def test_manifest_declares_current_worker_protocol() -> None:
 
 def test_schema_declares_only_supported_groups() -> None:
     manifest = read_manifest()
-    schema = json.loads((EXAMPLE_ROOT / manifest["config_schema"]["path"]).read_text(encoding="utf-8"))
+    schema = json.loads(
+        (EXAMPLE_ROOT / manifest["config_schema"]["path"]).read_text(encoding="utf-8")
+    )
 
     assert schema["additionalProperties"] is False
     assert set(schema["properties"]) == {
@@ -120,7 +127,9 @@ def test_project_builds_an_importable_wheel(tmp_path: Path) -> None:
     shutil.copytree(
         EXAMPLE_ROOT,
         project_root,
-        ignore=shutil.ignore_patterns("build", "dist", "*.egg-info", ".venv", "__pycache__", "*.py[cod]"),
+        ignore=shutil.ignore_patterns(
+            "build", "dist", "*.egg-info", ".venv", "__pycache__", "*.py[cod]"
+        ),
     )
     subprocess.run(
         ["uv", "build", "--wheel", "--out-dir", str(wheel_dir), str(project_root)],
@@ -142,7 +151,9 @@ def test_project_builds_an_importable_wheel(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("parent_policy", [None, "allow", "if-necessary-or-explicit"])
-def test_lock_is_portable_across_parent_uv_settings(tmp_path: Path, parent_policy: str | None) -> None:
+def test_lock_is_portable_across_parent_uv_settings(
+    tmp_path: Path, parent_policy: str | None
+) -> None:
     if parent_policy is not None:
         (tmp_path / "pyproject.toml").write_text(
             f'[tool.uv]\nprerelease = "{parent_policy}"\n', encoding="utf-8"
@@ -194,21 +205,28 @@ def test_wrong_type_is_rejected(example: Any) -> None:
     ("config", "field"),
     [
         ({"registration_control": {"kinds": []}}, "registration_control.kinds"),
-        ({"registration_control": {"registration_name": ""}}, "registration_control.registration_name"),
+        (
+            {"registration_control": {"registration_name": ""}},
+            "registration_control.registration_name",
+        ),
         ({"registration_control": {"reason": ""}}, "registration_control.reason"),
     ],
 )
 def test_invalid_registration_control_is_rejected(example: Any, config: dict[str, Any], field: str):
     diagnostics = example.ExamplePythonWorker().validate(config)
 
-    assert any(item.code == "examples.python_grpc_worker.invalid_type" and item.field == field for item in diagnostics)
+    assert any(
+        item.code == "examples.python_grpc_worker.invalid_type" and item.field == field
+        for item in diagnostics
+    )
 
 
 def test_unknown_field_is_rejected(example: Any) -> None:
     diagnostics = example.ExamplePythonWorker().validate({"requests": {"unknown": True}})
 
     assert any(
-        item.code == "examples.python_grpc_worker.unknown_field" and item.level.name == "ERROR" for item in diagnostics
+        item.code == "examples.python_grpc_worker.unknown_field" and item.level.name == "ERROR"
+        for item in diagnostics
     )
 
 
@@ -220,7 +238,9 @@ def test_register_rejects_invalid_configuration(example: Any) -> None:
         )
 
 
-async def test_manifest_entrypoint_serves_worker(example: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_manifest_entrypoint_serves_worker(
+    example: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     served: list[Any] = []
 
     async def capture(plugin: Any) -> None:
@@ -261,7 +281,9 @@ async def test_windows_worker_leaves_shutdown_to_relay(
     ]
 
 
-async def test_unix_worker_preserves_signal_handlers(example: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_unix_worker_preserves_signal_handlers(
+    example: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     signals = MagicMock()
     monkeypatch.setattr(example, "sys", SimpleNamespace(platform="linux"))
     monkeypatch.setattr(example, "signal", signals)
@@ -308,8 +330,13 @@ def test_enabled_registration_control_registers_expected_gate(example: Any):
         {example.RuntimeRegistrationKind.SUBSCRIBER},
         "documentation-controlled-subscriber",
     )
-    assert args[3]({example.RuntimeRegistrationKind.SUBSCRIBER}, args[2]) == ("disabled by documentation plugin")
-    assert args[3]({example.RuntimeRegistrationKind.SUBSCRIBER}, "documentation-observed-subscriber") is None
+    assert args[3]({example.RuntimeRegistrationKind.SUBSCRIBER}, args[2]) == (
+        "disabled by documentation plugin"
+    )
+    assert (
+        args[3]({example.RuntimeRegistrationKind.SUBSCRIBER}, "documentation-observed-subscriber")
+        is None
+    )
 
 
 async def test_event_metadata_injector_adds_transport_metadata(example: Any) -> None:
@@ -381,7 +408,9 @@ async def test_llm_request_sanitizer_uses_codec(example: Any) -> None:
     result = await sanitize({"headers": {}, "content": {"secret": "raw"}}, codec_context)
 
     codec.decode.assert_awaited_once()
-    codec.encode.assert_awaited_once_with({"secret": "[REDACTED]"}, {"headers": {}, "content": {"secret": "raw"}})
+    codec.encode.assert_awaited_once_with(
+        {"secret": "[REDACTED]"}, {"headers": {}, "content": {"secret": "raw"}}
+    )
     assert result["content"] == {"secret": "[REDACTED]"}
 
 
@@ -403,7 +432,9 @@ def test_tool_policy_blocks_configured_tool(example: Any) -> None:
     context, _runtime = register_example(example)
     policy = callback(context, "register_tool_conditional_execution_guardrail")
 
-    assert policy("dangerous_tool", {}) == "tool 'dangerous_tool' is blocked by documentation policy"
+    assert (
+        policy("dangerous_tool", {}) == "tool 'dangerous_tool' is blocked by documentation policy"
+    )
 
 
 def test_llm_policy_blocks_configured_model(example: Any) -> None:
@@ -431,7 +462,9 @@ async def test_tool_request_intercept_tags_real_request(example: Any) -> None:
 
 async def test_runtime_helpers_clean_up_successful_request(example: Any) -> None:
     context, runtime = register_example(example)
-    intercept = callback(context, "register_tool_execution_intercept", "documentation_runtime_events")
+    intercept = callback(
+        context, "register_tool_execution_intercept", "documentation_runtime_events"
+    )
     next_call = MagicMock()
     next_call.call = AsyncMock(return_value=ToolExecutionResult({"ok": True}))
 
@@ -448,13 +481,17 @@ async def test_runtime_helpers_clean_up_successful_request(example: Any) -> None
 async def test_runtime_helpers_close_failed_request(example: Any) -> None:
     context, runtime = register_example(example)
     runtime.emit_mark.side_effect = RuntimeError("mark failed")
-    intercept = callback(context, "register_tool_execution_intercept", "documentation_runtime_events")
+    intercept = callback(
+        context, "register_tool_execution_intercept", "documentation_runtime_events"
+    )
     next_call = MagicMock()
     next_call.call = AsyncMock(return_value=ToolExecutionResult({"ok": True}))
 
     with pytest.raises(RuntimeError, match="mark failed"):
         await intercept(
-            ToolExecutionContext(tool_name="safe_tool", args={"value": 1}, tool_call_id="call-runtime"),
+            ToolExecutionContext(
+                tool_name="safe_tool", args={"value": 1}, tool_call_id="call-runtime"
+            ),
             next_call,
         )
 
@@ -466,13 +503,17 @@ async def test_runtime_cleanup_preserves_the_callback_error(example: Any) -> Non
     context, runtime = register_example(example)
     runtime.emit_mark.side_effect = RuntimeError("mark failed")
     runtime.pop_scope.side_effect = RuntimeError("cleanup failed")
-    intercept = callback(context, "register_tool_execution_intercept", "documentation_runtime_events")
+    intercept = callback(
+        context, "register_tool_execution_intercept", "documentation_runtime_events"
+    )
     next_call = MagicMock()
     next_call.call = AsyncMock(return_value=ToolExecutionResult({"ok": True}))
 
     with pytest.raises(RuntimeError, match="mark failed"):
         await intercept(
-            ToolExecutionContext(tool_name="safe_tool", args={"value": 1}, tool_call_id="call-runtime"),
+            ToolExecutionContext(
+                tool_name="safe_tool", args={"value": 1}, tool_call_id="call-runtime"
+            ),
             next_call,
         )
 
@@ -494,12 +535,18 @@ def test_llm_request_intercept_preserves_outcome_fields(example: Any) -> None:
 
 async def test_tool_execution_returns_pending_mark(example: Any) -> None:
     context, _runtime = register_example(example)
-    intercept = callback(context, "register_tool_execution_intercept", "documentation_tool_execution")
+    intercept = callback(
+        context, "register_tool_execution_intercept", "documentation_tool_execution"
+    )
     next_call = MagicMock()
-    next_call.call = AsyncMock(return_value=ToolExecutionResult({"ok": True}, annotation={"source": "application"}))
+    next_call.call = AsyncMock(
+        return_value=ToolExecutionResult({"ok": True}, annotation={"source": "application"})
+    )
 
     outcome = await intercept(
-        ToolExecutionContext(tool_name="safe_tool", args={"value": 1}, tool_call_id="call-execution"),
+        ToolExecutionContext(
+            tool_name="safe_tool", args={"value": 1}, tool_call_id="call-execution"
+        ),
         next_call,
     )
 
