@@ -62,6 +62,10 @@ This part needs network access and can take a few minutes.
 These checks need the Rust tools installed above. They do not edit remote source
 code or license text.
 
+Formatting checks cover all tracked Python files and all in-tree Rust plugins
+on each commit. This also catches changes caused by new formatter settings or
+tool versions. Untracked Python files are left alone.
+
 If a hook changes files, review those changes, stage them, and commit again.
 To run every hook yourself, use:
 

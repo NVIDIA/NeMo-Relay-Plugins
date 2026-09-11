@@ -41,19 +41,21 @@ repos:
         types: [json]
       - id: ruff-check
         name: Lint Python
-        entry: uv run --locked --group test ruff check --fix
+        entry: uv run --locked --group test python -m scripts.checks python-lint
         language: system
-        types_or: [python, pyi]
+        always_run: true
+        pass_filenames: false
       - id: ruff-format
         name: Format Python
-        entry: uv run --locked --group test ruff format
+        entry: uv run --locked --group test python -m scripts.checks python-format
         language: system
-        types_or: [python, pyi]
+        always_run: true
+        pass_filenames: false
       - id: rust-fmt
         name: Format in-tree Rust plugins
         entry: uv run --locked python -m scripts.checks rust-fmt
         language: system
-        files: '\.rs$|(^|/)(Cargo\.toml|release\.toml|rustfmt\.toml)$|^scripts/checks\.py$'
+        always_run: true
         pass_filenames: false
       - id: runtime-integrity
         name: Update source artifact hashes

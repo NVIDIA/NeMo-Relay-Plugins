@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -25,6 +26,26 @@ def rust_fmt(root: Path):
                 cwd=source,
                 check=True,
             )
+
+
+def python_check(root: Path, command: str):
+    # Configuration and tool version changes can affect otherwise unchanged
+    # source files. Read the index to include all tracked Python files while
+    # leaving untracked work and generated files alone.
+    tracked = (
+        subprocess.check_output(
+            ["git", "ls-files", "--cached", "-z", "--", "*.py", "*.pyi"], cwd=root
+        )
+        .decode("utf-8")
+        .split("\0")
+    )
+    paths = sorted({name for name in tracked if name and inside(root, name).is_file()})
+    args = [sys.executable, "-m", "ruff", command]
+    if command == "check":
+        args.append("--fix")
+    # Bound command length on Windows as the number of plugins grows.
+    for offset in range(0, len(paths), 40):
+        subprocess.run(args + ["--", *paths[offset : offset + 40]], cwd=root, check=True)
 
 
 def lockfiles(root: Path):
@@ -79,12 +100,17 @@ def runtime_integrity(root: Path):
 
 
 def main():
+    checks = {
+        "rust-fmt": rust_fmt,
+        "python-lint": lambda root: python_check(root, "check"),
+        "python-format": lambda root: python_check(root, "format"),
+        "lockfiles": lockfiles,
+        "runtime-integrity": runtime_integrity,
+    }
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("check", choices=["rust-fmt", "lockfiles", "runtime-integrity"])
+    parser.add_argument("check", choices=checks)
     args = parser.parse_args()
-    {"rust-fmt": rust_fmt, "lockfiles": lockfiles, "runtime-integrity": runtime_integrity}[
-        args.check
-    ](ROOT)
+    checks[args.check](ROOT)
 
 
 if __name__ == "__main__":

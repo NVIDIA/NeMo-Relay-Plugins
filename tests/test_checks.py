@@ -120,3 +120,36 @@ def test_ci_uses_same_required_hooks():
     command = next(step["run"] for step in steps if step.get("name") == "Run pre-commit checks")
     assert "pre-commit run --all-files --show-diff-on-failure" in command
     assert "licenses" in workflow["jobs"]["required"]["needs"]
+
+
+@pytest.mark.parametrize("hook_id", ["ruff-check", "ruff-format", "rust-fmt"])
+def test_formatting_runs_for_settings_changes_and_deletions(hook_id):
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
+    hook = next(hook for repo in config["repos"] for hook in repo["hooks"] if hook["id"] == hook_id)
+    assert hook["always_run"]
+    assert not hook["pass_filenames"]
+
+
+def test_python_formatter_checks_unchanged_tracked_files_and_leaves_untracked_work(repo):
+    root, git, commit = repo
+    # Simulate changing settings after the source file was already committed.
+    source = root / "source with spaces.py"
+    commit(source.name, "answer=  42\n")
+    (root / "pyproject.toml").write_text("[tool.ruff]\nline-length = 90\n")
+    git("add", "pyproject.toml")
+    scratch = root / "scratch.py"
+    scratch.write_text("answer=  42\n")
+    checks.python_check(root, "format")
+    assert source.read_text() == "answer = 42\n"
+    assert scratch.read_text() == "answer=  42\n"
+
+
+def test_python_lint_handles_deleted_files_and_stub_files(repo):
+    root, git, commit = repo
+    commit("deleted.py", "answer = 42\n")
+    (root / "deleted.py").unlink()
+    stub = root / "types.pyi"
+    stub.write_text("import unused_module\nanswer: int\n")
+    git("add", stub.name)
+    checks.python_check(root, "check")
+    assert stub.read_text() == "answer: int\n"
