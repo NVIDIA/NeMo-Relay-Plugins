@@ -49,15 +49,40 @@ def test_aggregation_deduplicates_but_preserves_distinct_license_text(language, 
     assert result.count(heading) == 2
 
 
-def test_committed_aggregates_cover_every_plugin_and_tooling_inventory():
-    root = Path(__file__).resolve().parents[1]
-    for language in ["Python", "Rust"]:
-        sources = list(root.glob(f"plugins/*/ATTRIBUTIONS-{language}.md"))
-        tooling = root / "scripts/licensing" / f"ATTRIBUTIONS-{language}.md"
-        if tooling.exists():
-            sources.append(tooling)
-        expected = generate.aggregate([path.read_text() for path in sources], language)
-        assert (root / f"ATTRIBUTIONS-{language}.md").read_text() == expected
+def test_aggregation_uses_live_plugin_inventories_without_static_plugin_files(
+    tmp_path, monkeypatch
+):
+    documents = {
+        "tools": {"Python": "# Header\n\n## tools (1)\n\nMIT license text\n"},
+        "worker": {"Python": "# Header\n\n## worker (2)\n\nBSD license text\n"},
+        "remote": {"Rust": "# Header\n\n## remote - 3\n\nApache license text\n"},
+    }
+    monkeypatch.setattr(
+        generate,
+        "projects",
+        lambda root: [
+            (tmp_path / "tools", Path("scripts/licensing"), None, ["Python"]),
+            (tmp_path / "worker", Path("plugins/worker"), None, ["Python"]),
+            (tmp_path / "remote", Path("plugins/remote"), "1.96.1", ["Rust"]),
+        ],
+    )
+    monkeypatch.setattr(
+        generate,
+        "collect_project",
+        lambda source, *args, **kw: (documents[source.name], {"python": [], "rust": []}),
+    )
+    outputs, _ = generate.collect(tmp_path)
+    assert set(outputs) == {
+        Path("ATTRIBUTIONS-Python.md"),
+        Path("ATTRIBUTIONS-Rust.md"),
+        Path("scripts/licensing/ATTRIBUTIONS-Python.md"),
+    }
+    assert outputs[Path("ATTRIBUTIONS-Python.md")] == generate.aggregate(
+        [documents["tools"]["Python"], documents["worker"]["Python"]], "Python"
+    )
+    assert outputs[Path("ATTRIBUTIONS-Rust.md")] == generate.aggregate(
+        [documents["remote"]["Rust"]], "Rust"
+    )
 
 
 def test_remote_inventory_uses_locked_sha_and_rejects_modified_checkout(tmp_path, monkeypatch):

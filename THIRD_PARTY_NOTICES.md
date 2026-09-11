@@ -17,10 +17,10 @@ covers its full Rust workspace at the saved commit.
 | All Python dependencies (plugins and tooling) | [ATTRIBUTIONS-Python.md](ATTRIBUTIONS-Python.md) |
 | All Rust dependencies (all plugins) | [ATTRIBUTIONS-Rust.md](ATTRIBUTIONS-Rust.md) |
 | Repository Python tooling | [ATTRIBUTIONS-Python.md](scripts/licensing/ATTRIBUTIONS-Python.md) |
-| Python worker example | [ATTRIBUTIONS-Python.md](plugins/example-python-grpc-worker-plugin/ATTRIBUTIONS-Python.md) |
-| Rust worker example | [ATTRIBUTIONS-Rust.md](plugins/example-rust-grpc-worker-plugin/ATTRIBUTIONS-Rust.md) |
-| Rust native example | [ATTRIBUTIONS-Rust.md](plugins/example-rust-native-plugin/ATTRIBUTIONS-Rust.md) |
-| Switchyard plugin | [ATTRIBUTIONS-Rust.md](plugins/switchyard-plugin/ATTRIBUTIONS-Rust.md) |
+
+Each plugin's bundle includes an `ATTRIBUTIONS-Python.md` or `ATTRIBUTIONS-Rust.md`
+file generated from its locked dependencies during packaging. These per-plugin
+files are not committed in the source tree.
 
 ## Copied and remote source code
 

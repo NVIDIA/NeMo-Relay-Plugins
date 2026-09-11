@@ -76,6 +76,11 @@ jobs:
         env:
           PLUGIN_RUST: ${{ matrix.rust }}
         run: rustup toolchain install "$PLUGIN_RUST" --profile minimal
+      - name: Install Rust license tool
+        if: matrix.rust != ''
+        env:
+          PLUGIN_RUST: ${{ matrix.rust }}
+        run: cargo "+$PLUGIN_RUST" install cargo-about --version 0.9.1 --locked --features cli
       - name: Build, test, package, and install the bundle
         env:
           GH_TOKEN: ${{ github.token }}

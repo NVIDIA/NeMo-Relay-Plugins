@@ -57,14 +57,51 @@ def projects(root: Path):
         package = (
             inside(source_root, source["path"]) if source["location"] == "remote" else source_root
         )
-        languages = [
-            language
-            for filename, language in [("pyproject.toml", "Python"), ("Cargo.toml", "Rust")]
-            if (package / filename).exists()
-        ]
-        if not languages:
-            raise ValueError(f"No supported package manifest at plugin source: {name}")
+        languages = project_languages(package)
         yield source_root, registration, manifest["toolchains"].get("rust"), languages
+
+
+def project_languages(package: Path) -> list[str]:
+    languages = [
+        language
+        for filename, language in [("pyproject.toml", "Python"), ("Cargo.toml", "Rust")]
+        if (package / filename).exists()
+    ]
+    if not languages:
+        raise ValueError(f"No supported package manifest at plugin source: {package}")
+    return languages
+
+
+def collect_project(source: Path, toolchain, languages, *, inventory_only=False):
+    """Read one project's locked dependencies for either bundles or aggregation."""
+    documents = {}
+    inventory = {"python": [], "rust": []}
+    with project_context(source, toolchain):
+        if "Python" in languages:
+            packages = collector._python_attribution_packages()
+            inventory["python"] = [
+                collector._rendered_python_package_inventory(p) for p in packages
+            ]
+            if not inventory_only:
+                parts = [collector.PYTHON_HEADER]
+                for package in packages:
+                    collector._render_python_package(parts, **package)
+                documents["Python"] = "".join(parts).rstrip() + "\n"
+        if "Rust" in languages:
+            data = collector._cargo_about_json()
+            members = collector._cargo_workspace_members()
+            inventory["rust"] = collector._rust_license_inventory(data, members)
+            if not inventory_only:
+                documents["Rust"] = collector._render_rust_attributions(data, members)
+    return documents, inventory
+
+
+def write_project_attributions(source_root: Path, package: Path, output: Path, *, toolchain=None):
+    """Generate bundle notices directly from this project's locked source."""
+    documents, _ = collect_project(source_root, toolchain, project_languages(package))
+    output.mkdir(parents=True, exist_ok=True)
+    for language, text in documents.items():
+        (output / f"ATTRIBUTIONS-{language}.md").write_text(text, encoding="utf-8")
 
 
 def sections(text: str, language: str) -> list[str]:
@@ -95,27 +132,16 @@ def collect(root: Path, *, inventory_only=False) -> tuple[dict[Path, str], dict]
     inventory = {"python": [], "rust": []}
     for source, destination, toolchain, languages in projects(root):
         print(f"Collecting licenses: {destination}", file=sys.stderr)
-        with project_context(source, toolchain):
-            if "Python" in languages:
-                packages = collector._python_attribution_packages()
-                inventory["python"].extend(
-                    collector._rendered_python_package_inventory(p) for p in packages
-                )
-                if not inventory_only:
-                    parts = [collector.PYTHON_HEADER]
-                    for package in packages:
-                        collector._render_python_package(parts, **package)
-                    text = "".join(parts).rstrip() + "\n"
-                    outputs[destination / "ATTRIBUTIONS-Python.md"] = text
-                    documents["Python"].append(text)
-            if "Rust" in languages:
-                data = collector._cargo_about_json()
-                members = collector._cargo_workspace_members()
-                inventory["rust"].extend(collector._rust_license_inventory(data, members))
-                if not inventory_only:
-                    text = collector._render_rust_attributions(data, members)
-                    outputs[destination / "ATTRIBUTIONS-Rust.md"] = text
-                    documents["Rust"].append(text)
+        project_documents, project_inventory = collect_project(
+            source, toolchain, languages, inventory_only=inventory_only
+        )
+        for language, text in project_documents.items():
+            # Per-plugin notices belong in generated bundles, not source control.
+            if destination.parts[0] != "plugins":
+                outputs[destination / f"ATTRIBUTIONS-{language}.md"] = text
+            documents[language].append(text)
+        for language, rows in project_inventory.items():
+            inventory[language].extend(rows)
     for language, texts in documents.items():
         if texts:
             outputs[Path(f"ATTRIBUTIONS-{language}.md")] = aggregate(texts, language)

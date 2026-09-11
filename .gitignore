@@ -8,3 +8,4 @@ target/
 *.egg-info/
 build/
 .DS_Store
+plugins/*/ATTRIBUTIONS*.md

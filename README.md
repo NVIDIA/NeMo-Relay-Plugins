@@ -57,7 +57,7 @@ Actions files. The first run needs network access and may take a few minutes.
 The hooks format Python and Rust, check file syntax, check package lockfiles,
 validate release manifests, and run the shared tests. When formatting changes a
 source artifact, they update its hash in the runtime manifest. Each commit also
-rebuilds the plugin and root attribution files, including after file deletions.
+rebuilds the root attribution files from all plugin locks, including after file deletions.
 This part needs network access and can take a few minutes.
 These checks need the Rust tools installed above. They do not edit remote source
 code or license text.
@@ -222,7 +222,9 @@ See [RELEASE.md](RELEASE.md) to tag one plugin and publish its draft release. Fo
 each project’s **attributions**: credits and license text for the packages it uses.
 These files follow NeMo Relay’s format. The root Python and Rust files combine
 entries from all plugins and repository tools, keeping each package version.
-Every plugin bundle includes its license, notices, and attribution files.
+Each package script generates its plugin's attribution files from its locked
+dependencies and includes them in the bundle. Per-plugin attribution files are
+not committed. Every bundle still includes its license and source notices.
 
-When you change a package lockfile or remote source commit, update the plugin and
-root attribution files. Follow [the licensing instructions](scripts/licensing/README.md).
+When you change a package lockfile or remote source commit, update the root
+attribution files. Follow [the licensing instructions](scripts/licensing/README.md).

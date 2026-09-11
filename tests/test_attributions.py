@@ -10,8 +10,63 @@ from pathlib import Path
 import pytest
 
 from scripts.licensing import attributions_lockfile_md as attribution
+from scripts.licensing import generate
+from scripts.bundles import create_archive, extract_archive
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    "language,manifest,lock",
+    [
+        ("Python", "pyproject.toml", "uv.lock"),
+        ("Rust", "Cargo.toml", "Cargo.lock"),
+    ],
+)
+@pytest.mark.parametrize("extension", [".tar.gz", ".zip"])
+def test_bundle_notices_are_generated_from_current_locks(
+    tmp_path, monkeypatch, language, manifest, lock, extension
+):
+    source_root = tmp_path / "workspace"
+    package = source_root / "package"
+    package.mkdir(parents=True)
+    (package / manifest).touch()
+    # Unrelated workspace languages must not leak into this plugin's notices.
+    (source_root / "pyproject.toml").touch()
+    (source_root / lock).write_text("dependency version 1")
+    filename = f"ATTRIBUTIONS-{language}.md"
+    (package / filename).write_text("Stale source copy: do not use")
+    (tmp_path / filename).write_text("Unrelated root aggregate: do not use")
+    bundle = tmp_path / "bundle"
+
+    def collect(source, toolchain, languages):
+        assert source == source_root
+        assert toolchain == "1.96.1"
+        assert languages == [language]
+        return {language: "License for " + (source / lock).read_text()}, {}
+
+    monkeypatch.setattr(generate, "collect_project", collect)
+    for version in ["1", "2"]:
+        (source_root / lock).write_text(f"dependency version {version}")
+        generate.write_project_attributions(source_root, package, bundle, toolchain="1.96.1")
+        archive = tmp_path / f"bundle-{version}{extension}"
+        create_archive(bundle, archive, "plugin")
+        extracted = extract_archive(archive, tmp_path / f"extracted-{version}")
+        assert (extracted / filename).read_text() == f"License for dependency version {version}"
+        assert sorted(p.name for p in extracted.iterdir()) == [filename]
+    assert (package / filename).read_text() == "Stale source copy: do not use"
+
+
+def test_packaging_stops_when_license_generation_fails(tmp_path, monkeypatch):
+    (tmp_path / "Cargo.toml").touch()
+
+    def fail(*args):
+        raise ValueError("Missing license text")
+
+    monkeypatch.setattr(generate, "collect_project", fail)
+    with pytest.raises(ValueError, match="Missing license text"):
+        generate.write_project_attributions(tmp_path, tmp_path, tmp_path / "bundle")
+    assert not (tmp_path / "bundle").exists()
 
 
 @pytest.mark.parametrize("lock", [ROOT / "uv.lock", *ROOT.glob("plugins/*/uv.lock")])
@@ -22,13 +77,9 @@ def test_python_attributions_cover_locked_registry_versions(lock):
         for p in packages
         if any(key in p["source"] for key in ("registry", "git"))
     }
-    path = (
-        ROOT / "scripts/licensing/ATTRIBUTIONS-Python.md"
-        if lock.parent == ROOT
-        else lock.with_name("ATTRIBUTIONS-Python.md")
-    )
+    path = ROOT / "ATTRIBUTIONS-Python.md"
     text = path.read_text()
-    assert set(re.findall(r"^## (.+) \((.+)\)$", text, re.MULTILINE)) == expected
+    assert expected <= set(re.findall(r"^## (.+) \((.+)\)$", text, re.MULTILINE))
     assert "No license file found" not in text
 
 
@@ -36,8 +87,8 @@ def test_python_attributions_cover_locked_registry_versions(lock):
 def test_rust_attributions_cover_locked_registry_versions(lock):
     packages = tomllib.loads(lock.read_text())["package"]
     expected = {(p["name"], p["version"]) for p in packages if "source" in p}
-    text = lock.with_name("ATTRIBUTIONS-Rust.md").read_text()
-    assert set(re.findall(r"^## (.+) - (.+)$", text, re.MULTILINE)) == expected
+    text = (ROOT / "ATTRIBUTIONS-Rust.md").read_text()
+    assert expected <= set(re.findall(r"^## (.+) - (.+)$", text, re.MULTILINE))
     assert "No package license file" not in text
 
 

@@ -58,3 +58,15 @@ def write_runtime_manifest(bundle: Path, manifest: dict, filename: str = "relay-
     """Digest the declared artifact after packaging and write the runtime manifest."""
     manifest["integrity"]["sha256"] = "sha256:" + sha256(bundle / manifest["source"]["artifact"])
     (bundle / filename).write_text(tomli_w.dumps(manifest), encoding="utf-8")
+
+
+def write_attributions(ctx: Context):
+    """Generate this plugin's notices from its own source and lockfiles."""
+    from scripts.licensing.generate import write_project_attributions
+
+    write_project_attributions(
+        ctx.source_root,
+        ctx.source,
+        ctx.bundle,
+        toolchain=ctx.release["toolchains"].get("rust"),
+    )

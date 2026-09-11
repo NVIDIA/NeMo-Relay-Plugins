@@ -4,7 +4,7 @@
 Attribution files list the packages a project uses and include their license
 text. To update these files, start at the repository root. Install the Rust
 versions listed in the plugin manifests and the `cargo-about` tool. Then run
-the generator for all plugins and both root files:
+the generator to update the committed aggregate files:
 
 ```sh
 rustup toolchain install 1.96.1 --profile minimal
@@ -16,10 +16,13 @@ The generator finds plugins through their `release.toml` files and reads each
 plugin's package lockfile. For remote plugins, it downloads the exact commit
 set in `source.sha`.
 
-Each plugin keeps its attribution files in its own folder. The list for the
+Plugin attribution files are generated during packaging and placed inside the
+bundle. They are not committed in the plugin folders. The list for the
 repository's Python tools is in `scripts/licensing/ATTRIBUTIONS-Python.md`.
-The root `ATTRIBUTIONS-Python.md` and `ATTRIBUTIONS-Rust.md` combine all these
-lists. They remove exact duplicates but keep different versions and license text.
+The committed root `ATTRIBUTIONS-Python.md` and `ATTRIBUTIONS-Rust.md` combine
+fresh data from all plugins and tools. They remove exact duplicates but keep
+different versions and license text. Building a bundle does not read these
+aggregate files; it generates notices from that plugin's own locked source.
 
 Files follow NeMo Relay's format and include full license text. They cover all
 platforms and packages listed in the locks, including build and test packages.
@@ -39,14 +42,14 @@ also has no special rules for named packages. It fails if it cannot find the
 source or license text.
 
 Commit the generated files along with package or source updates. To check that
-all plugin and root attribution files are up to date without editing them, run:
+the committed aggregate and tooling files are up to date without editing them, run:
 
 ```sh
 uv run --locked python -m scripts.licensing.generate --check
 ```
 
 The pre-commit attribution hook runs the same generator on each commit, including
-commits that delete files. It updates the attribution files for you. Review and
+commits that delete files. It updates the committed files for you. Review and
 stage those changes before committing again. CI runs every hook
 and fails if generated files differ from the committed copies. To run just this
 hook locally, use:
@@ -56,9 +59,13 @@ uv run --locked --group test pre-commit run attributions --all-files
 ```
 
 Every bundle must include a nonempty `ATTRIBUTIONS*.md` file. Each plugin's
-package script copies its attribution files and source project notices into
-the bundle. The shared checks reject missing attribution files, both before
-packing the bundle and after extracting it.
+package script calls `write_attributions(ctx)` from `scripts/tasks.py` to generate
+its attribution files. It also copies the source project notices into the bundle.
+The helper reads the package lockfile and, for remote plugins, the checked-out
+workspace at the pinned commit. If license collection fails, packaging fails.
+Rust packaging needs `cargo-about`; CI installs the same version shown above.
+The shared checks reject missing attribution files, both before packing the
+bundle and after extracting it.
 
 ## Comparing licenses
 

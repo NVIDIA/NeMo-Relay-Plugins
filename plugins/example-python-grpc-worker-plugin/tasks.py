@@ -8,7 +8,7 @@ import shutil
 import tomllib
 
 sys.path.insert(0, os.environ["REPO_DIR"])
-from scripts.tasks import Context, run, write_runtime_manifest
+from scripts.tasks import Context, run, write_attributions, write_runtime_manifest
 
 
 def build(ctx: Context):
@@ -69,11 +69,11 @@ def package(ctx: Context):
         "LICENSE",
         "NOTICE",
         "UPSTREAM.md",
-        "ATTRIBUTIONS-Python.md",
     ]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
     write_runtime_manifest(ctx.bundle, manifest)
+    write_attributions(ctx)
 
 
 if __name__ == "__main__":

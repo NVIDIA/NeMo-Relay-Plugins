@@ -76,7 +76,7 @@ repos:
         always_run: true
         pass_filenames: false
       - id: attributions
-        name: Update plugin and aggregate attributions
+        name: Update aggregate attributions
         entry: uv run --locked python -m scripts.licensing.generate --inventory-output .cache/license-inventory.json
         language: system
         # Run even for deletions, which are absent from pre-commit's file list.

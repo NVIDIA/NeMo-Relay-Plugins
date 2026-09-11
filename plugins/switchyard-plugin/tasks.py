@@ -7,7 +7,7 @@ import shutil
 import sys
 
 sys.path.insert(0, os.environ["REPO_DIR"])
-from scripts.tasks import Context, library_filename, run
+from scripts.tasks import Context, library_filename, run, write_attributions
 
 
 CRATE = "switchyard-nemo-relay-plugin"
@@ -37,8 +37,8 @@ def package(ctx: Context):
         cwd=ctx.source_root,
     )
 
-    for filename in ["ATTRIBUTIONS-Rust.md", "THIRD_PARTY_NOTICES.md"]:
-        shutil.copy2(ctx.plugin / filename, ctx.bundle / filename)
+    write_attributions(ctx)
+    shutil.copy2(ctx.plugin / "THIRD_PARTY_NOTICES.md", ctx.bundle / "THIRD_PARTY_NOTICES.md")
     # Preserve notices for the workspace crates linked into the plugin.
     for crate in ["protocol", "switchyard-translation"]:
         destination = ctx.bundle / "notices" / crate
