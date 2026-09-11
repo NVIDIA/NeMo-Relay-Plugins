@@ -26,10 +26,14 @@ def package(ctx: Context):
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
     manifest["source"]["artifact"] = filename
     manifest["load"]["entrypoint"] = filename
-    for filename in ["config.schema.json", "LICENSE"]:
+    for filename in [
+        "config.schema.json",
+        "LICENSE",
+        "NOTICE",
+        "UPSTREAM.md",
+        "ATTRIBUTIONS-Rust.md",
+    ]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
-    if (ctx.source / "NOTICE").exists():
-        shutil.copy2(ctx.source / "NOTICE", ctx.bundle / "NOTICE")
     write_runtime_manifest(ctx.bundle, manifest)
 
 

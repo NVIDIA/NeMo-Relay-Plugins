@@ -3,6 +3,8 @@
 
 Independently built and released plugins for [NVIDIA NeMo Relay](https://github.com/NVIDIA/NeMo-Relay). Each directory under `plugins/` owns its release version, source selection, supported platforms, dependencies, tests, and packaging commands.
 
+This project is currently not accepting contributions.
+
 The five platform identifiers are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not included. Python workers explicitly exclude Windows ARM64 because their gRPC dependency does not provide a supported wheel there. CI requires every declared combination, totaling 19 jobs for a full build.
 
 ## Official plugins
@@ -145,3 +147,15 @@ PRs validate every manifest and run shared tooling tests. Branch pushes do not t
 Every selected plugin builds, tests, packages, and installs on all declared native platforms. Configure branch protection to require **Plugin checks**, the stable aggregate check. Build jobs have read-only permissions. Only the tag release job can write release data.
 
 See [RELEASE.md](RELEASE.md) for single-plugin tagging and draft publication. Report security issues using [SECURITY.md](SECURITY.md). Source code is licensed under [Apache-2.0](LICENSE); bundles retain their applicable upstream notices.
+
+## Third-party notices and attribution
+
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) identifies copied sources and the
+attribution inventory for each independently locked project. The attribution files
+use NeMo Relay's format, including dependency versions and full license text.
+The root Python and Rust attribution files aggregate all plugins and repository
+tooling, retaining each distinct dependency version.
+Plugin bundles include their license, notices, and dependency attributions.
+
+When updating a dependency lockfile or remote source revision, regenerate the
+plugin and aggregate attribution files using [the licensing instructions](scripts/licensing/README.md).

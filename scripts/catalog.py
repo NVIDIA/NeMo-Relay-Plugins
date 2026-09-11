@@ -25,6 +25,9 @@ SHARED_FILES = {
     "uv.lock",
     "LICENSE",
     "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "ATTRIBUTIONS-Python.md",
+    "ATTRIBUTIONS-Rust.md",
     ".python-version",
     ".gitattributes",
 }

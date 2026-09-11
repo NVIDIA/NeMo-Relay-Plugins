@@ -26,6 +26,7 @@ if stage == "package":
     bundle = Path(os.environ["OUTPUT_DIR"]) / "custom-bundle"
     bundle.mkdir()
     (bundle / "custom-worker").write_bytes(b"custom artifact")
+    (bundle / "ATTRIBUTIONS.md").write_text("Fixture license text")
     digest = hashlib.sha256(b"custom artifact").hexdigest()
     (bundle / "runtime.toml").write_text(
         '[plugin]\\nkind = "worker"\\nid = "custom.runtime"\\n'

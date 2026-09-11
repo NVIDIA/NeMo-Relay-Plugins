@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.environ["REPO_DIR"])
@@ -35,6 +36,15 @@ def package(ctx: Context):
         ],
         cwd=ctx.source_root,
     )
+
+    for filename in ["ATTRIBUTIONS-Rust.md", "THIRD_PARTY_NOTICES.md"]:
+        shutil.copy2(ctx.plugin / filename, ctx.bundle / filename)
+    # Preserve notices for the workspace crates linked into the plugin.
+    for crate in ["protocol", "switchyard-translation"]:
+        destination = ctx.bundle / "notices" / crate
+        destination.mkdir(parents=True)
+        for filename in ["LICENSE", "NOTICE"]:
+            shutil.copy2(ctx.source_root / "crates" / crate / filename, destination / filename)
 
 
 if __name__ == "__main__":

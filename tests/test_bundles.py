@@ -21,6 +21,7 @@ from scripts.bundles import (
 def bundle(tmp_path):
     root = tmp_path / "bundle"
     root.mkdir()
+    (root / "ATTRIBUTIONS.md").write_text("Third-party fixture license text\n")
     (root / "worker").write_bytes(b"worker fixture")
     (root / "worker").chmod(0o755)
     manifest = {
@@ -38,12 +39,24 @@ def test_archive_round_trip_and_tampering(bundle, tmp_path, extension):
     archive = tmp_path / ("plugin" + extension)
     create_archive(bundle, archive, "plugin")
     extracted = extract_archive(archive, tmp_path / "extracted")
+    assert (extracted / "ATTRIBUTIONS.md").read_bytes() == (bundle / "ATTRIBUTIONS.md").read_bytes()
     verify_bundle(extracted, "relay-plugin.toml", "worker")
     if extension == ".tar.gz":
         assert (extracted / "worker").stat().st_mode & 0o111
     (extracted / "worker").write_bytes(b"tampered")
     with pytest.raises(ValueError, match="digest"):
         verify_bundle(extracted, "relay-plugin.toml", "worker")
+
+
+@pytest.mark.parametrize("contents", [None, "", "   \n"])
+def test_bundle_requires_attributions(bundle, contents):
+    path = bundle / "ATTRIBUTIONS.md"
+    if contents is None:
+        path.unlink()
+    else:
+        path.write_text(contents)
+    with pytest.raises(ValueError, match="ATTRIBUTIONS"):
+        verify_bundle(bundle, "relay-plugin.toml", "worker")
 
 
 @pytest.mark.parametrize(

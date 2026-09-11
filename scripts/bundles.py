@@ -49,6 +49,11 @@ def verify_bundle(bundle: Path, manifest_path: str, kind: str) -> dict:
     for path in bundle.rglob("*"):
         if path.is_symlink() or (not path.is_file() and not path.is_dir()):
             raise ValueError(f"unsupported bundle member: {path}")
+    attributions = list(bundle.glob("ATTRIBUTIONS*.md"))
+    if not attributions or any(
+        not path.is_file() or not path.read_text(encoding="utf-8").strip() for path in attributions
+    ):
+        raise ValueError("bundle must include nonempty ATTRIBUTIONS files")
     return manifest
 
 

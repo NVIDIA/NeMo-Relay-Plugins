@@ -1,0 +1,9 @@
+NVIDIA NeMo Relay plugin example
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This software includes an example adapted from NVIDIA NeMo Relay 0.8.4:
+https://github.com/NVIDIA/NeMo-Relay/tree/6f0caf7aefc1363943badf51a643d4c5e52f020a/examples/rust-native-plugin
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+See UPSTREAM.md for the origin and local adaptations.
+Third-party dependency licenses and notices are reproduced in ATTRIBUTIONS-Rust.md.

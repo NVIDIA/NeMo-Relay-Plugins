@@ -62,10 +62,16 @@ def package(ctx: Context):
         ctx.bundle / package,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
-    for filename in ["pyproject.toml", "uv.lock", "config.schema.json", "LICENSE"]:
+    for filename in [
+        "pyproject.toml",
+        "uv.lock",
+        "config.schema.json",
+        "LICENSE",
+        "NOTICE",
+        "UPSTREAM.md",
+        "ATTRIBUTIONS-Python.md",
+    ]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
-    if (ctx.source / "NOTICE").exists():
-        shutil.copy2(ctx.source / "NOTICE", ctx.bundle / "NOTICE")
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
     write_runtime_manifest(ctx.bundle, manifest)
 
