@@ -19,6 +19,26 @@ Remote Rust plugins also include the packages in their source workspace. A
 workspace is a group of packages built together. This covers upstream code
 that the plugin uses through local paths, as well as downloaded dependencies.
 
+For Python, the generator starts at the plugin's `source.path` and looks for
+`uv.lock`. If it is missing there, it checks each parent folder up to the
+source repository's root. This supports both a plugin's own lockfile and a
+shared workspace lockfile. It never searches outside the source checkout.
+
+Remote Python notices include local-path and editable packages from that
+lockfile. An editable package loads code from its source folder. The generator
+reads each package's `pyproject.toml` and license files from the pinned checkout.
+It supports `license-files` patterns and the older `license.file` and
+`license.text` fields. Without these fields, it looks for `LICENSE`, `LICENCE`,
+or `COPYING` files in the package and then its parent folders. It also keeps
+nearby `NOTICE` files. Paths must stay inside the checkout. Missing license
+text or a package name or version that conflicts with the lockfile stops
+generation. For a dynamic version, the lockfile supplies the version without
+running the package's build code.
+
+Virtual workspace entries contain no installable package, so they are excluded.
+Local packages in in-tree plugins remain excluded from third-party notices.
+Downloaded registry and pinned Git dependencies are included in both cases.
+
 Plugin attribution files are generated during packaging and placed inside the
 bundle. They are not committed in the plugin folders. The list for the
 repository's Python tools is in `scripts/licensing/ATTRIBUTIONS-Python.md`.

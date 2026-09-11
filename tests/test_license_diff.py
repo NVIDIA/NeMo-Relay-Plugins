@@ -61,9 +61,30 @@ def test_aggregation_uses_live_plugin_inventories_without_static_plugin_files(
         generate,
         "projects",
         lambda root: [
-            (tmp_path / "tools", Path("scripts/licensing"), None, ["Python"], False),
-            (tmp_path / "worker", Path("plugins/worker"), None, ["Python"], False),
-            (tmp_path / "remote", Path("plugins/remote"), "1.96.1", ["Rust"], True),
+            (
+                tmp_path / "tools",
+                Path("scripts/licensing"),
+                None,
+                ["Python"],
+                False,
+                tmp_path / "tools",
+            ),
+            (
+                tmp_path / "worker",
+                Path("plugins/worker"),
+                None,
+                ["Python"],
+                False,
+                tmp_path / "worker",
+            ),
+            (
+                tmp_path / "remote",
+                Path("plugins/remote"),
+                "1.96.1",
+                ["Rust"],
+                True,
+                tmp_path / "remote",
+            ),
         ],
     )
 

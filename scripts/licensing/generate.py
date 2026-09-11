@@ -35,7 +35,7 @@ def project_context(root, toolchain=None):
 def projects(root: Path):
     """Discover independent locks, checking remote workspaces out only at their locked SHAs."""
     if (root / "uv.lock").exists():
-        yield root, Path("scripts/licensing"), None, ["Python"], False
+        yield root, Path("scripts/licensing"), None, ["Python"], False, root
     if not (root / "plugins").exists():
         return
     for name, manifest in discover(root).items():
@@ -65,6 +65,7 @@ def projects(root: Path):
             manifest["toolchains"].get("rust"),
             languages,
             source["location"] == "remote",
+            package,
         )
 
 
@@ -80,14 +81,22 @@ def project_languages(package: Path) -> list[str]:
 
 
 def collect_project(
-    source: Path, toolchain, languages, *, inventory_only=False, include_workspace=False
+    source: Path,
+    toolchain,
+    languages,
+    *,
+    inventory_only=False,
+    include_workspace=False,
+    package: Path | None = None,
 ):
     """Read one project's locked dependencies for either bundles or aggregation."""
     documents = {}
     inventory = {"python": [], "rust": []}
     with project_context(source, toolchain):
         if "Python" in languages:
-            packages = collector._python_attribution_packages()
+            from scripts.licensing.python_local import locked_packages
+
+            packages = locked_packages(source, package or source, include_local=include_workspace)
             inventory["python"] = [
                 collector._rendered_python_package_inventory(p) for p in packages
             ]
@@ -118,7 +127,11 @@ def write_project_attributions(
 ):
     """Generate bundle notices directly from this project's locked source."""
     documents, _ = collect_project(
-        source_root, toolchain, project_languages(package), include_workspace=include_workspace
+        source_root,
+        toolchain,
+        project_languages(package),
+        include_workspace=include_workspace,
+        package=package,
     )
     output.mkdir(parents=True, exist_ok=True)
     for language, text in documents.items():
@@ -151,7 +164,7 @@ def collect(root: Path, *, inventory_only=False) -> tuple[dict[Path, str], dict]
     outputs = {}
     documents = {"Python": [], "Rust": []}
     inventory = {"python": [], "rust": []}
-    for source, destination, toolchain, languages, include_workspace in projects(root):
+    for source, destination, toolchain, languages, include_workspace, package in projects(root):
         print(f"Collecting licenses: {destination}", file=sys.stderr)
         project_documents, project_inventory = collect_project(
             source,
@@ -159,6 +172,7 @@ def collect(root: Path, *, inventory_only=False) -> tuple[dict[Path, str], dict]
             languages,
             inventory_only=inventory_only,
             include_workspace=include_workspace,
+            package=package,
         )
         for language, text in project_documents.items():
             # Per-plugin notices belong in generated bundles, not source control.
