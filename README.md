@@ -9,6 +9,10 @@ The supported platforms are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `wi
 
 A **worker** runs as a separate process. A **native plugin** loads a library into the Relay process. **In-tree** source code lives in this repository. **Remote** source code lives in another repository.
 
+Plugins can also use published Python wheels or Rust crates. See
+[package sources](docs/package-sources.md) for `location = "wheel"` and
+`location = "crate"`, locked downloads, packaging, and tests.
+
 ## Official plugins
 
 | Plugin | Type | Source | Supported platforms |

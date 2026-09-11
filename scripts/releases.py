@@ -103,6 +103,22 @@ def release_notes(
             f"Refer to the [upstream release documentation]({manifest['metadata'].get('documentation', source['repository'])}) "
             "for plugin behavior and upstream changes.",
         ]
+    if manifest["source"]["location"] in {"wheel", "crate"}:
+        source = manifest["source"]
+        url = (
+            f"https://pypi.org/project/{source['package']}/{source['version']}/"
+            if source["location"] == "wheel"
+            else f"https://crates.io/crates/{source['package']}/{source['version']}"
+        )
+        documentation = manifest["metadata"].get("documentation", url)
+        lines += [
+            "",
+            "## Upstream documentation",
+            "",
+            f"Package: [{source['package']} {source['version']}]({url}). "
+            f"Refer to the [upstream release documentation]({documentation}) for plugin behavior and upstream changes. "
+            "Exact package URLs and checksums are recorded in the attached build metadata.",
+        ]
     return "\n".join(lines) + "\n"
 
 

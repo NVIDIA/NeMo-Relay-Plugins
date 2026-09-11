@@ -143,6 +143,13 @@ def verify_assets(manifest: dict, directory: Path, commit: str) -> list[Path]:
             and data.get("source_commit") != manifest["source"]["sha"]
         ):
             raise ValueError("remote source commit mismatch")
+        if manifest["source"]["location"] in {"wheel", "crate"}:
+            from scripts.catalog import ROOT
+            from scripts.package_sources import provenance
+
+            expected_source = provenance(ROOT / "plugins" / manifest["name"], manifest, platform)
+            if data.get("package_source") != expected_source:
+                raise ValueError("package source provenance mismatch")
         if not re.fullmatch("[0-9a-f]{40}", data.get("relay", {}).get("sha", "")):
             raise ValueError("missing tested Relay revision")
         digest = sha256(archive)

@@ -41,6 +41,8 @@ def projects(root: Path):
     for name, manifest in discover(root).items():
         source = manifest["source"]
         registration = Path("plugins") / name
+        if source["location"] in {"wheel", "crate"}:
+            continue
         if source["location"] == "remote":
             source_root = root / ".cache/licensing" / name / source["sha"]
             if not source_root.exists():
@@ -181,6 +183,23 @@ def collect(root: Path, *, inventory_only=False) -> tuple[dict[Path, str], dict]
             documents[language].append(text)
         for language, rows in project_inventory.items():
             inventory[language].extend(rows)
+    if (root / "plugins").exists():
+        for name, manifest in discover(root).items():
+            if manifest["source"]["location"] not in {"wheel", "crate"}:
+                continue
+            from scripts.licensing.packages import collect_packages
+
+            print(f"Collecting package licenses: plugins/{name}", file=sys.stderr)
+            package_documents, package_inventory = collect_packages(
+                root / "plugins" / name,
+                manifest,
+                root / ".cache/packages",
+                inventory_only=inventory_only,
+            )
+            for language, text in package_documents.items():
+                documents[language].append(text)
+            for language, rows in package_inventory.items():
+                inventory[language].extend(rows)
     for language, texts in documents.items():
         if texts:
             outputs[Path(f"ATTRIBUTIONS-{language}.md")] = aggregate(texts, language)

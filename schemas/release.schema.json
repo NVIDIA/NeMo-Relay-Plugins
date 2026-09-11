@@ -73,7 +73,9 @@
         "location": {
           "enum": [
             "in-tree",
-            "remote"
+            "remote",
+            "wheel",
+            "crate"
           ]
         },
         "path": {
@@ -91,13 +93,81 @@
         "sha": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"
+        },
+        "package": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9][A-Za-z0-9_.+!-]*$"
+        },
+        "manifest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "location",
-        "path"
+        "location"
       ],
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "location": {
+                "const": "in-tree"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "path"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "repository"
+                  ]
+                },
+                {
+                  "required": [
+                    "ref"
+                  ]
+                },
+                {
+                  "required": [
+                    "sha"
+                  ]
+                },
+                {
+                  "required": [
+                    "package"
+                  ]
+                },
+                {
+                  "required": [
+                    "version"
+                  ]
+                },
+                {
+                  "required": [
+                    "manifest"
+                  ]
+                },
+                {
+                  "required": [
+                    "lock"
+                  ]
+                }
+              ]
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -108,14 +178,98 @@
           },
           "then": {
             "required": [
+              "path",
               "repository",
               "ref",
               "sha"
-            ]
-          },
-          "else": {
+            ],
             "not": {
               "anyOf": [
+                {
+                  "required": [
+                    "package"
+                  ]
+                },
+                {
+                  "required": [
+                    "version"
+                  ]
+                },
+                {
+                  "required": [
+                    "manifest"
+                  ]
+                },
+                {
+                  "required": [
+                    "lock"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "location": {
+                "const": "wheel"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "package",
+              "version",
+              "manifest"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "path"
+                  ]
+                },
+                {
+                  "required": [
+                    "repository"
+                  ]
+                },
+                {
+                  "required": [
+                    "ref"
+                  ]
+                },
+                {
+                  "required": [
+                    "sha"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "location": {
+                "const": "crate"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "package",
+              "version",
+              "manifest"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "path"
+                  ]
+                },
                 {
                   "required": [
                     "repository"

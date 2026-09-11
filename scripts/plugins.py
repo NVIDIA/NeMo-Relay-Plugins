@@ -105,11 +105,21 @@ def run_plugin(
         shutil.rmtree(work)
     work.mkdir(parents=True)
     plugin = ROOT / "plugins" / name
+    package_identity = None
+    source_manifest = None
     if manifest["source"]["location"] == "remote":
         source_root = work / "source"
         checkout(manifest["source"]["repository"] + ".git", manifest["source"]["sha"], source_root)
         source = inside(source_root, manifest["source"]["path"])
         source_commit = manifest["source"]["sha"]
+    elif manifest["source"]["location"] in {"wheel", "crate"}:
+        from scripts.package_sources import prepare
+
+        source_root, source_manifest, package_identity = prepare(
+            plugin, manifest, platform, work, ROOT / ".cache/packages"
+        )
+        source = source_root
+        source_commit = None
     else:
         source_root = source = inside(plugin, manifest["source"]["path"])
         source_commit = commit
@@ -126,6 +136,14 @@ def run_plugin(
         subprocess.run(["uv", "python", "install", manifest["toolchains"]["python"]], check=True)
         plugin_python = subprocess.check_output(find_python, text=True)
     env["PLUGIN_PYTHON"] = plugin_python.strip()
+    if package_identity:
+        env["SOURCE_MANIFEST"] = str(source_manifest)
+        env["PACKAGE_SOURCE_LOCK"] = str(work / "package-source.json")
+        if manifest["source"]["location"] == "wheel":
+            from scripts.package_sources import install_wheels
+
+            env["WHEELHOUSE"] = str(work / "wheels")
+            env["PACKAGE_PYTHON"] = str(install_wheels(work, env["PLUGIN_PYTHON"]))
     env.update(
         {
             "PYTHON": sys.executable,
@@ -171,6 +189,7 @@ def run_plugin(
         "repository_commit": commit,
         "repository_dirty": bool(git("status", "--porcelain", "--untracked-files=normal")),
         "source_commit": source_commit,
+        **({"package_source": package_identity} if package_identity else {}),
         "relay": {
             "sha": resolution["sha"],
             "tag": resolution["tag"],

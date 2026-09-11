@@ -39,6 +39,12 @@ Virtual workspace entries contain no installable package, so they are excluded.
 Local packages in in-tree plugins remain excluded from third-party notices.
 Downloaded registry and pinned Git dependencies are included in both cases.
 
+For `wheel` and `crate` sources, the generator reads the exact downloads listed
+in the plugin's `source.lock`. Wheels supply their own license text. Crates
+supply their package license and a `Cargo.lock` for their dependencies. Root
+attributions cover every declared platform; bundles cover their own platform.
+See [package sources](../../docs/package-sources.md) for the lockfile format.
+
 Plugin attribution files are generated during packaging and placed inside the
 bundle. They are not committed in the plugin folders. The list for the
 repository's Python tools is in `scripts/licensing/ATTRIBUTIONS-Python.md`.

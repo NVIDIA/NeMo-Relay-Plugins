@@ -63,7 +63,9 @@ def discover(root: Path = ROOT) -> dict[str, dict]:
         if name != directory.name or name in result:
             raise ValueError(f"{path}: name must be unique and match folder")
         for value in (
-            manifest["source"]["path"],
+            manifest["source"].get("path", "."),
+            manifest["source"].get("manifest", "relay-plugin.toml"),
+            manifest["source"].get("lock", "source.lock"),
             manifest["artifacts"]["bundle"],
             manifest["artifacts"]["manifest"],
         ):
@@ -75,6 +77,12 @@ def discover(root: Path = ROOT) -> dict[str, dict]:
             raise ValueError(f"{path}: source directory does not exist")
         manifest.setdefault("platforms", list(PLATFORMS))
         manifest.setdefault("relay", {})
+        if manifest["source"]["location"] in {"wheel", "crate"}:
+            from scripts.package_sources import read_lock
+
+            read_lock(directory, manifest)
+            if manifest["source"]["location"] == "crate" and not manifest["toolchains"].get("rust"):
+                raise ValueError("crate sources require a Rust toolchain")
         result[name] = manifest
     if not result:
         raise ValueError("no plugins found")
