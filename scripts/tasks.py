@@ -69,4 +69,5 @@ def write_attributions(ctx: Context):
         ctx.source,
         ctx.bundle,
         toolchain=ctx.release["toolchains"].get("rust"),
+        include_workspace=ctx.release["source"]["location"] == "remote",
     )

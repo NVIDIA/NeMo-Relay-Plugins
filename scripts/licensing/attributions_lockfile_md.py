@@ -235,6 +235,7 @@ def _cargo_workspace_members() -> set[str]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     metadata: dict[str, Any] = json.loads(proc.stdout)
@@ -268,6 +269,7 @@ def _cargo_metadata() -> dict[str, Any]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return cast(dict[str, Any], json.loads(proc.stdout))
@@ -295,6 +297,7 @@ def _cargo_about_json() -> dict[str, Any]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return cast(dict[str, Any], json.loads(proc.stdout))
@@ -919,6 +922,7 @@ def _python_upstream_licenses(pkg: dict[str, Any]) -> list[tuple[str, str]]:
                     ["git", "ls-remote", "--tags", repository, ref, ref + "^{}"],
                     cwd=ROOT,
                     text=True,
+                    encoding="utf-8",
                 )
                 refs = dict((line.split()[1], line.split()[0]) for line in output.splitlines())
                 sha = refs.get(ref + "^{}", refs.get(ref))

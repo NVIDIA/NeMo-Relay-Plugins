@@ -61,16 +61,17 @@ def test_aggregation_uses_live_plugin_inventories_without_static_plugin_files(
         generate,
         "projects",
         lambda root: [
-            (tmp_path / "tools", Path("scripts/licensing"), None, ["Python"]),
-            (tmp_path / "worker", Path("plugins/worker"), None, ["Python"]),
-            (tmp_path / "remote", Path("plugins/remote"), "1.96.1", ["Rust"]),
+            (tmp_path / "tools", Path("scripts/licensing"), None, ["Python"], False),
+            (tmp_path / "worker", Path("plugins/worker"), None, ["Python"], False),
+            (tmp_path / "remote", Path("plugins/remote"), "1.96.1", ["Rust"], True),
         ],
     )
-    monkeypatch.setattr(
-        generate,
-        "collect_project",
-        lambda source, *args, **kw: (documents[source.name], {"python": [], "rust": []}),
-    )
+
+    def collect_project(source, *args, **kwargs):
+        assert kwargs["include_workspace"] is (source.name == "remote")
+        return documents[source.name], {"python": [], "rust": []}
+
+    monkeypatch.setattr(generate, "collect_project", collect_project)
     outputs, _ = generate.collect(tmp_path)
     assert set(outputs) == {
         Path("ATTRIBUTIONS-Python.md"),
@@ -121,6 +122,7 @@ def test_remote_inventory_uses_locked_sha_and_rejects_modified_checkout(tmp_path
     assert calls == [("https://example.com/repo", sha)]
     assert projects[0][0].name == sha
     assert projects[0][3] == ["Rust"]
+    assert projects[0][4] is True
     monkeypatch.setattr(
         generate.subprocess,
         "check_output",

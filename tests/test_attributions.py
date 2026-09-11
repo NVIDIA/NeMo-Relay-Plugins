@@ -2,7 +2,9 @@
 """Locked inventories and verified license sources must survive regeneration."""
 
 import io
+import json
 import re
+import sys
 import tomllib
 import zipfile
 from pathlib import Path
@@ -14,6 +16,75 @@ from scripts.licensing import generate
 from scripts.bundles import create_archive, extract_archive
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("remote", [False, True])
+def test_remote_workspace_packages_reach_notices_and_license_inventory(
+    tmp_path, monkeypatch, remote
+):
+    workspace = {
+        "id": "path+file:///checkout/crate#0.2.0",
+        "name": "upstream-crate",
+        "version": "0.2.0",
+    }
+    registry = {"id": "registry+example#dependency@1.0.0", "name": "dependency", "version": "1.0.0"}
+    data = {
+        "licenses": [
+            {
+                "id": "MIT",
+                "text": "Copyright Authors\nPermission is hereby granted",
+                "used_by": [{"crate": workspace}, {"crate": registry}],
+            }
+        ]
+    }
+    monkeypatch.setattr(attribution, "_cargo_about_json", lambda: data)
+    monkeypatch.setattr(attribution, "_cargo_workspace_members", lambda: {workspace["id"]})
+    monkeypatch.setattr(attribution, "_rust_missing_cargo_about_packages", lambda keys: [])
+    (tmp_path / "Cargo.toml").touch()
+    (tmp_path / "Cargo.lock").write_text(
+        '[[package]]\nname = "upstream-crate"\nversion = "0.2.0"\n'
+        '[[package]]\nname = "dependency"\nversion = "1.0.0"\n'
+    )
+    documents, inventory = generate.collect_project(
+        tmp_path, None, ["Rust"], include_workspace=remote
+    )
+    assert ("## upstream-crate - 0.2.0" in documents["Rust"]) is remote
+    assert ("upstream-crate" in {row["package"] for row in inventory["rust"]}) is remote
+    assert "## dependency - 1.0.0" in documents["Rust"]
+    generate.write_project_attributions(
+        tmp_path, tmp_path, tmp_path / "bundle", include_workspace=remote
+    )
+    assert (tmp_path / "bundle/ATTRIBUTIONS-Rust.md").read_text() == documents["Rust"]
+    if remote:
+        data["licenses"][0]["used_by"] = [{"crate": registry}]
+        with pytest.raises(
+            ValueError, match="Missing remote workspace attributions.*upstream-crate"
+        ):
+            generate.collect_project(tmp_path, None, ["Rust"], include_workspace=True)
+
+
+@pytest.mark.parametrize(
+    "reader", ["_cargo_about_json", "_cargo_metadata", "_cargo_workspace_members"]
+)
+def test_cargo_json_preserves_unicode_on_legacy_windows_encoding(tmp_path, monkeypatch, reader):
+    payload = {"workspace_members": ["Bjørn/Łódź"], "license": "Copyright Bjørn – Łódź"}
+    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    run = attribution.subprocess.run
+
+    def emit_cargo_json(args, **kwargs):
+        # Simulate the legacy Windows default unless the collector chooses UTF-8.
+        kwargs.setdefault("encoding", "cp1252")
+        return run(
+            [sys.executable, "-c", f"import sys; sys.stdout.buffer.write({encoded!r})"], **kwargs
+        )
+
+    monkeypatch.setattr(attribution, "ROOT", tmp_path)
+    monkeypatch.setattr(attribution, "_cargo_fetch_locked", lambda: None)
+    monkeypatch.setattr(attribution.subprocess, "run", emit_cargo_json)
+    expected = (
+        set(payload["workspace_members"]) if reader == "_cargo_workspace_members" else payload
+    )
+    assert getattr(attribution, reader)() == expected
 
 
 @pytest.mark.parametrize(
@@ -39,11 +110,13 @@ def test_bundle_notices_are_generated_from_current_locks(
     (tmp_path / filename).write_text("Unrelated root aggregate: do not use")
     bundle = tmp_path / "bundle"
 
-    def collect(source, toolchain, languages):
+    def collect(source, toolchain, languages, **kwargs):
         assert source == source_root
         assert toolchain == "1.96.1"
         assert languages == [language]
-        return {language: "License for " + (source / lock).read_text()}, {}
+        return {
+            language: "Copyright Bjørn – Łódź\nLicense for " + (source / lock).read_text() + "\n"
+        }, {}
 
     monkeypatch.setattr(generate, "collect_project", collect)
     for version in ["1", "2"]:
@@ -52,7 +125,9 @@ def test_bundle_notices_are_generated_from_current_locks(
         archive = tmp_path / f"bundle-{version}{extension}"
         create_archive(bundle, archive, "plugin")
         extracted = extract_archive(archive, tmp_path / f"extracted-{version}")
-        assert (extracted / filename).read_text() == f"License for dependency version {version}"
+        assert (extracted / filename).read_bytes() == (
+            f"Copyright Bjørn – Łódź\nLicense for dependency version {version}\n".encode("utf-8")
+        )
         assert sorted(p.name for p in extracted.iterdir()) == [filename]
     assert (package / filename).read_text() == "Stale source copy: do not use"
 
@@ -60,7 +135,7 @@ def test_bundle_notices_are_generated_from_current_locks(
 def test_packaging_stops_when_license_generation_fails(tmp_path, monkeypatch):
     (tmp_path / "Cargo.toml").touch()
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise ValueError("Missing license text")
 
     monkeypatch.setattr(generate, "collect_project", fail)

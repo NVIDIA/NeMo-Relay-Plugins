@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def project_context(root, toolchain=None):
 def projects(root: Path):
     """Discover independent locks, checking remote workspaces out only at their locked SHAs."""
     if (root / "uv.lock").exists():
-        yield root, Path("scripts/licensing"), None, ["Python"]
+        yield root, Path("scripts/licensing"), None, ["Python"], False
     if not (root / "plugins").exists():
         return
     for name, manifest in discover(root).items():
@@ -58,7 +59,13 @@ def projects(root: Path):
             inside(source_root, source["path"]) if source["location"] == "remote" else source_root
         )
         languages = project_languages(package)
-        yield source_root, registration, manifest["toolchains"].get("rust"), languages
+        yield (
+            source_root,
+            registration,
+            manifest["toolchains"].get("rust"),
+            languages,
+            source["location"] == "remote",
+        )
 
 
 def project_languages(package: Path) -> list[str]:
@@ -72,7 +79,9 @@ def project_languages(package: Path) -> list[str]:
     return languages
 
 
-def collect_project(source: Path, toolchain, languages, *, inventory_only=False):
+def collect_project(
+    source: Path, toolchain, languages, *, inventory_only=False, include_workspace=False
+):
     """Read one project's locked dependencies for either bundles or aggregation."""
     documents = {}
     inventory = {"python": [], "rust": []}
@@ -89,19 +98,31 @@ def collect_project(source: Path, toolchain, languages, *, inventory_only=False)
                 documents["Python"] = "".join(parts).rstrip() + "\n"
         if "Rust" in languages:
             data = collector._cargo_about_json()
-            members = collector._cargo_workspace_members()
+            # A remote workspace is external source, including its path dependencies.
+            members = set() if include_workspace else collector._cargo_workspace_members()
             inventory["rust"] = collector._rust_license_inventory(data, members)
+            if include_workspace:
+                locked = tomllib.loads((source / "Cargo.lock").read_text(encoding="utf-8"))
+                expected = {(p["name"], p["version"]) for p in locked["package"]}
+                actual = {(p["package"], p["version"]) for p in inventory["rust"]}
+                missing = expected - actual
+                if missing:
+                    raise ValueError(f"Missing remote workspace attributions: {sorted(missing)}")
             if not inventory_only:
                 documents["Rust"] = collector._render_rust_attributions(data, members)
     return documents, inventory
 
 
-def write_project_attributions(source_root: Path, package: Path, output: Path, *, toolchain=None):
+def write_project_attributions(
+    source_root: Path, package: Path, output: Path, *, toolchain=None, include_workspace=False
+):
     """Generate bundle notices directly from this project's locked source."""
-    documents, _ = collect_project(source_root, toolchain, project_languages(package))
+    documents, _ = collect_project(
+        source_root, toolchain, project_languages(package), include_workspace=include_workspace
+    )
     output.mkdir(parents=True, exist_ok=True)
     for language, text in documents.items():
-        (output / f"ATTRIBUTIONS-{language}.md").write_text(text, encoding="utf-8")
+        (output / f"ATTRIBUTIONS-{language}.md").write_text(text, encoding="utf-8", newline="\n")
 
 
 def sections(text: str, language: str) -> list[str]:
@@ -130,10 +151,14 @@ def collect(root: Path, *, inventory_only=False) -> tuple[dict[Path, str], dict]
     outputs = {}
     documents = {"Python": [], "Rust": []}
     inventory = {"python": [], "rust": []}
-    for source, destination, toolchain, languages in projects(root):
+    for source, destination, toolchain, languages, include_workspace in projects(root):
         print(f"Collecting licenses: {destination}", file=sys.stderr)
         project_documents, project_inventory = collect_project(
-            source, toolchain, languages, inventory_only=inventory_only
+            source,
+            toolchain,
+            languages,
+            inventory_only=inventory_only,
+            include_workspace=include_workspace,
         )
         for language, text in project_documents.items():
             # Per-plugin notices belong in generated bundles, not source control.
@@ -171,7 +196,7 @@ def main():
                 stale.append(str(relative))
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
+            path.write_text(text, encoding="utf-8", newline="\n")
     if args.inventory_output:
         import json
 

@@ -15,6 +15,9 @@ uv run --locked python -m scripts.licensing.generate
 The generator finds plugins through their `release.toml` files and reads each
 plugin's package lockfile. For remote plugins, it downloads the exact commit
 set in `source.sha`.
+Remote Rust plugins also include the packages in their source workspace. A
+workspace is a group of packages built together. This covers upstream code
+that the plugin uses through local paths, as well as downloaded dependencies.
 
 Plugin attribution files are generated during packaging and placed inside the
 bundle. They are not committed in the plugin folders. The list for the
