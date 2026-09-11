@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import signal
+import sys
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from typing import Any, cast
@@ -476,7 +478,17 @@ def _diagnostic(
 
 async def main() -> None:
     """Serve the worker entrypoint referenced by relay-plugin.toml."""
-    await serve_plugin(ExamplePythonWorker())
+    if sys.platform != "win32":
+        await serve_plugin(ExamplePythonWorker())
+        return
+
+    # Windows sends console Ctrl+C to Relay and its workers. Stay alive until
+    # Relay finishes its requests and asks this worker to shut down over gRPC.
+    previous_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        await serve_plugin(ExamplePythonWorker())
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
 
 
 if __name__ == "__main__":

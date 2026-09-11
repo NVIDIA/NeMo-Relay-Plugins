@@ -9,7 +9,6 @@ import contextlib
 import hashlib
 import importlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -17,12 +16,13 @@ import tomllib
 from collections.abc import Iterator
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
-import grpc  # Required on every declared platform.
+import grpc  # noqa: F401 — Required on every declared platform.
 
 from nemo_relay_plugin import PluginContext, PluginRuntime, ToolExecutionContext, ToolExecutionResult  # noqa: E402
 
@@ -231,6 +231,44 @@ async def test_manifest_entrypoint_serves_worker(example: Any, monkeypatch: pyte
 
     assert len(served) == 1
     assert isinstance(served[0], example.ExamplePythonWorker)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+async def test_windows_worker_leaves_shutdown_to_relay(
+    example: Any, monkeypatch: pytest.MonkeyPatch, fail: bool
+) -> None:
+    previous_handler = object()
+    signals = SimpleNamespace(SIGINT=2, SIG_IGN=1, signal=MagicMock(return_value=previous_handler))
+    monkeypatch.setattr(example, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(example, "signal", signals)
+
+    async def serve(_plugin: Any) -> None:
+        # Ignore Ctrl+C before accepting requests, and keep ignoring it until
+        # the SDK has finished serving, including its shutdown RPC.
+        signals.signal.assert_called_once_with(signals.SIGINT, signals.SIG_IGN)
+        if fail:
+            raise RuntimeError("worker failed")
+
+    monkeypatch.setattr(example, "serve_plugin", serve)
+    if fail:
+        with pytest.raises(RuntimeError, match="worker failed"):
+            await example.main()
+    else:
+        await example.main()
+    assert signals.signal.call_args_list == [
+        call(signals.SIGINT, signals.SIG_IGN),
+        call(signals.SIGINT, previous_handler),
+    ]
+
+
+async def test_unix_worker_preserves_signal_handlers(example: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    signals = MagicMock()
+    monkeypatch.setattr(example, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(example, "signal", signals)
+    monkeypatch.setattr(example, "serve_plugin", AsyncMock())
+    await example.main()
+    signals.signal.assert_not_called()
+    example.serve_plugin.assert_awaited_once()
 
 
 def test_register_installs_all_protocol_surfaces(example: Any) -> None:

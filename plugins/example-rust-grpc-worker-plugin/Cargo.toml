@@ -17,6 +17,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+
 [dev-dependencies]
 nemo-relay = { version = "=0.9.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "65eb82bf3d788986512246abf7f8ab7a520f28d9", features = ["worker-grpc", "__skip-implicit-config"] }
 sha2 = "0.11"

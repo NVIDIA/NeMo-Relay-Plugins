@@ -17,3 +17,7 @@ changing the host does not update the SDK lock.
 Local changes keep Rust builds in release mode and save each plugin's Cargo
 lockfile. They also add this repository's packaging and bundle tests.
 The README uses plain language and links to the build and release guides here.
+
+On Windows, the worker ignores console Ctrl+C. Relay receives that signal and
+asks the worker to shut down after it finishes its work. This keeps the worker
+available while Relay closes its connections.
