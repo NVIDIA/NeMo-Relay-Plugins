@@ -117,3 +117,27 @@ PR CI puts the report in the Actions summary and the downloadable `license-repor
 file set. It does not post PR comments. Attribution files must be up to date for
 CI to pass. The license diff is a report for review; like NeMo Relay's check,
 it does not block CI if the comparison fails.
+
+## Dependency inventory
+
+PR CI also creates a `dependency-inventory` artifact and links to it from the
+repository-check job summary. The artifact contains `dependencies.csv`. Each
+row gives the package name, exact locked version, language, and dependency type.
+It lists dependencies declared directly by the repository tools and plugins.
+Transitive packages remain in the attribution files but are not repeated in
+this direct-dependency report.
+
+The dependency types are `direct + required`, `direct + optional`,
+`development-only`, and `test-only`. Python dependencies in the `test` or
+`tests` development group are test-only. Other Python development groups are
+development-only. Rust build dependencies are development-only, and Rust dev
+dependencies are test-only. If the same exact package has more than one use,
+the report keeps its broadest use in this order: required, optional,
+development, then test.
+
+To create the same CSV locally, run:
+
+```sh
+uv run --locked python -m scripts.licensing.dependency_inventory \
+  --output .cache/dependencies.csv
+```
