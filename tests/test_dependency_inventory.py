@@ -5,9 +5,11 @@ import csv
 
 from scripts.licensing.dependency_inventory import (
     DEVELOPMENT,
-    OPTIONAL,
-    REQUIRED,
+    DIRECT_OPTIONAL,
+    DIRECT_REQUIRED,
     TEST,
+    TRANSITIVE_OPTIONAL,
+    TRANSITIVE_REQUIRED,
     Dependency,
     python_dependencies,
     rust_dependencies,
@@ -47,6 +49,12 @@ source = { registry = "https://example.invalid" }
 name = "optional-package"
 version = "3.0.0"
 source = { registry = "https://example.invalid" }
+dependencies = [{ name = "optional-transitive" }]
+
+[[package]]
+name = "optional-transitive"
+version = "3.1.0"
+source = { registry = "https://example.invalid" }
 
 [[package]]
 name = "development-package"
@@ -68,9 +76,10 @@ source = { registry = "https://example.invalid" }
 
     assert python_dependencies(tmp_path, tmp_path) == [
         Dependency("development-package", "4.0.0", "Python", DEVELOPMENT),
-        Dependency("optional-package", "3.0.0", "Python", OPTIONAL),
-        Dependency("required-package", "2.0.0", "Python", REQUIRED),
-        Dependency("required-transitive", "2.1.0", "Python", REQUIRED),
+        Dependency("optional-package", "3.0.0", "Python", DIRECT_OPTIONAL),
+        Dependency("optional-transitive", "3.1.0", "Python", TRANSITIVE_OPTIONAL),
+        Dependency("required-package", "2.0.0", "Python", DIRECT_REQUIRED),
+        Dependency("required-transitive", "2.1.0", "Python", TRANSITIVE_REQUIRED),
         Dependency("test-package", "5.0.0", "Python", TEST),
         Dependency("test-transitive", "5.1.0", "Python", TEST),
     ]
@@ -126,6 +135,7 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
             }
         )
     required_transitive_id = "registry+example#required-transitive@2.1.0"
+    optional_transitive_id = "registry+example#optional-transitive@3.1.0"
     test_transitive_id = "registry+example#test-transitive@5.1.0"
     packages.extend(
         [
@@ -134,6 +144,13 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
                 "name": "required-transitive",
                 "version": "2.1.0",
                 "manifest_path": "/registry/required-transitive/Cargo.toml",
+                "dependencies": [],
+            },
+            {
+                "id": optional_transitive_id,
+                "name": "optional-transitive",
+                "version": "3.1.0",
+                "manifest_path": "/registry/optional-transitive/Cargo.toml",
                 "dependencies": [],
             },
             {
@@ -162,6 +179,16 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
                     ],
                 },
                 {
+                    "id": "registry+example#optional@3.0.0",
+                    "deps": [
+                        {
+                            "name": "optional_transitive",
+                            "pkg": optional_transitive_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+                {
                     "id": "registry+example#tester@5.0.0",
                     "deps": [
                         {
@@ -177,9 +204,10 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
 
     assert rust_dependencies(tmp_path, metadata) == [
         Dependency("builder", "4.0.0", "Rust", DEVELOPMENT),
-        Dependency("optional", "3.0.0", "Rust", OPTIONAL),
-        Dependency("required", "2.0.0", "Rust", REQUIRED),
-        Dependency("required-transitive", "2.1.0", "Rust", REQUIRED),
+        Dependency("optional", "3.0.0", "Rust", DIRECT_OPTIONAL),
+        Dependency("optional-transitive", "3.1.0", "Rust", TRANSITIVE_OPTIONAL),
+        Dependency("required", "2.0.0", "Rust", DIRECT_REQUIRED),
+        Dependency("required-transitive", "2.1.0", "Rust", TRANSITIVE_REQUIRED),
         Dependency("test-transitive", "5.1.0", "Rust", TEST),
         Dependency("tester", "5.0.0", "Rust", TEST),
     ]
@@ -190,7 +218,7 @@ def test_csv_has_requested_columns_and_one_row_per_package(tmp_path):
     write_csv(
         [
             Dependency("example", "1.0", "Python", TEST),
-            Dependency("example", "1.0", "Python", REQUIRED),
+            Dependency("example", "1.0", "Python", DIRECT_REQUIRED),
         ],
         output,
     )
@@ -200,6 +228,6 @@ def test_csv_has_requested_columns_and_one_row_per_package(tmp_path):
                 "name": "example",
                 "version": "1.0",
                 "language": "Python",
-                "dependency_type": REQUIRED,
+                "dependency_type": DIRECT_REQUIRED,
             }
         ]

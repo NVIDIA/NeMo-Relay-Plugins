@@ -126,17 +126,17 @@ row gives the package name, exact locked version, language, and dependency type.
 It lists both direct and transitive dependencies from the resolved lockfile
 graphs for the repository tools and plugins.
 
-The dependency types are `direct + required`, `direct + optional`,
-`development-only`, and `test-only`. Python dependencies in the `test` or
-`tests` development group are test-only. Other Python development groups are
-development-only. Rust build dependencies are development-only, and Rust dev
-dependencies are test-only. If the same exact package has more than one use,
-the report keeps its broadest use in this order: required, optional,
-development, then test.
+The dependency types are `direct + required`, `transitive + required`,
+`direct + optional`, `transitive + optional`, `development-only`, and
+`test-only`. Python dependencies in the `test` or `tests` development group are
+test-only. Other Python development groups are development-only. Rust build
+dependencies are development-only, and Rust dev dependencies are test-only.
 
-Transitive packages inherit the type of the direct dependency path that reaches
-them. If more than one path reaches a package, the same broadest-use order
-applies.
+Transitive packages inherit the required or optional scope of the direct
+dependency path that reaches them. If more than one path reaches a package, the
+report keeps its broadest use. Required wins over optional, runtime wins over
+development and test, and direct wins over transitive within the same runtime
+scope.
 
 To create the same CSV locally, run:
 

@@ -15,11 +15,20 @@ from scripts.licensing.python_local import lock_root
 from scripts.package_sources import prepare, read_lock
 
 
-REQUIRED = "direct + required"
-OPTIONAL = "direct + optional"
+DIRECT_REQUIRED = "direct + required"
+DIRECT_OPTIONAL = "direct + optional"
+TRANSITIVE_REQUIRED = "transitive + required"
+TRANSITIVE_OPTIONAL = "transitive + optional"
 DEVELOPMENT = "development-only"
 TEST = "test-only"
-TYPE_ORDER = {REQUIRED: 0, OPTIONAL: 1, DEVELOPMENT: 2, TEST: 3}
+TYPE_ORDER = {
+    DIRECT_REQUIRED: 0,
+    TRANSITIVE_REQUIRED: 1,
+    DIRECT_OPTIONAL: 2,
+    TRANSITIVE_OPTIONAL: 3,
+    DEVELOPMENT: 4,
+    TEST: 5,
+}
 
 
 @dataclass(frozen=True)
@@ -48,6 +57,13 @@ def _deduplicate(rows: Iterable[Dependency]) -> list[Dependency]:
     )
 
 
+def _transitive_type(dependency_type: str) -> str:
+    return {
+        DIRECT_REQUIRED: TRANSITIVE_REQUIRED,
+        DIRECT_OPTIONAL: TRANSITIVE_OPTIONAL,
+    }.get(dependency_type, dependency_type)
+
+
 def _python_package(lock_packages: list[dict], dependency: dict) -> dict:
     candidates = [
         package
@@ -61,7 +77,7 @@ def _python_package(lock_packages: list[dict], dependency: dict) -> dict:
         candidates = [p for p in candidates if p.get("source") == dependency["source"]]
     if len(candidates) != 1:
         identity = dependency.get("name", "unknown")
-        raise ValueError(f"Expected one locked Python package for direct dependency: {identity}")
+        raise ValueError(f"Expected one locked Python package for dependency: {identity}")
     return candidates[0]
 
 
@@ -95,9 +111,9 @@ def python_dependencies(
     roots = _python_roots(lock_packages, package, include_workspace)
     queue = []
     for root in roots:
-        scopes = [(root.get("dependencies", []), REQUIRED)]
+        scopes = [(root.get("dependencies", []), DIRECT_REQUIRED)]
         scopes.extend(
-            (dependencies, OPTIONAL)
+            (dependencies, DIRECT_OPTIONAL)
             for dependencies in root.get("optional-dependencies", {}).values()
         )
         scopes.extend(
@@ -139,10 +155,11 @@ def python_dependencies(
                     dependency_type=dependency_type,
                 )
             )
-        queue.extend((child, dependency_type) for child in resolved.get("dependencies", []))
+        child_type = _transitive_type(dependency_type)
+        queue.extend((child, child_type) for child in resolved.get("dependencies", []))
         optional = resolved.get("optional-dependencies", {})
         for extra in extras:
-            queue.extend((child, dependency_type) for child in optional.get(extra, []))
+            queue.extend((child, child_type) for child in optional.get(extra, []))
     return _deduplicate(rows)
 
 
@@ -165,11 +182,13 @@ def _rust_resolved_packages(metadata: dict, package_id: str, declaration: dict) 
         if candidate["name"] == declaration["name"]:
             matches.append(candidate)
     if not matches:
-        raise ValueError(f"No resolved Rust package for direct dependency: {dependency_name}")
+        raise ValueError(f"No resolved Rust package for dependency: {dependency_name}")
     return matches
 
 
-def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool = False):
+def rust_dependencies(
+    package: Path, metadata: dict, *, include_workspace: bool = False, direct: bool = True
+):
     """Return dependency closures resolved by Cargo for the package or workspace."""
     manifest = (package / "Cargo.toml").resolve()
     packages = metadata.get("packages", [])
@@ -189,7 +208,10 @@ def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool 
             elif kind == "build":
                 dependency_type = DEVELOPMENT
             elif kind is None:
-                dependency_type = OPTIONAL if declaration.get("optional") else REQUIRED
+                if declaration.get("optional"):
+                    dependency_type = DIRECT_OPTIONAL if direct else TRANSITIVE_OPTIONAL
+                else:
+                    dependency_type = DIRECT_REQUIRED if direct else TRANSITIVE_REQUIRED
             else:
                 raise ValueError(f"Unsupported Cargo dependency kind: {kind}")
             for resolved in _rust_resolved_packages(metadata, root["id"], declaration):
@@ -218,7 +240,7 @@ def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool 
             # Registry package dev-dependencies are not part of its usable graph. Workspace
             # dev-dependencies are already seeded above with their own test-only scope.
             if any(kind.get("kind") != "dev" for kind in dependency.get("dep_kinds", [])):
-                queue.append((dependency["pkg"], dependency_type))
+                queue.append((dependency["pkg"], _transitive_type(dependency_type)))
     return _deduplicate(rows)
 
 
@@ -248,7 +270,16 @@ def collect(root: Path) -> list[Dependency]:
         if location == "wheel":
             # A wheel source lock contains the root wheel and its complete locked closure.
             rows.extend(
-                Dependency(item["name"], item["version"], "Python", REQUIRED)
+                Dependency(
+                    item["name"],
+                    item["version"],
+                    "Python",
+                    DIRECT_REQUIRED
+                    if _normalized_name(item["name"])
+                    == _normalized_name(manifest["source"]["package"])
+                    and item["version"] == manifest["source"]["version"]
+                    else TRANSITIVE_REQUIRED,
+                )
                 for item in lock["artifacts"]
             )
             continue
@@ -262,11 +293,16 @@ def collect(root: Path) -> list[Dependency]:
                 if artifact["sha256"] in seen:
                     continue
                 seen.add(artifact["sha256"])
-                rows.append(Dependency(artifact["name"], artifact["version"], "Rust", REQUIRED))
+                rows.append(
+                    Dependency(artifact["name"], artifact["version"], "Rust", DIRECT_REQUIRED)
+                )
                 with project_context(source, manifest["toolchains"]["rust"]):
                     rows.extend(
                         rust_dependencies(
-                            source, collector._cargo_metadata(), include_workspace=True
+                            source,
+                            collector._cargo_metadata(),
+                            include_workspace=True,
+                            direct=False,
                         )
                     )
     return _deduplicate(rows)
