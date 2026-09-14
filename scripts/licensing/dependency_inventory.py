@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Write exact, direct package dependencies and their declared use to CSV."""
+"""Write exact package dependencies and their inherited declared use to CSV."""
 
 import argparse
 import csv
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Iterable
 from scripts.catalog import discover
 from scripts.licensing import attributions_lockfile_md as collector
 from scripts.licensing.python_local import lock_root
-from scripts.package_sources import read_lock
+from scripts.package_sources import prepare, read_lock
 
 
 REQUIRED = "direct + required"
@@ -86,13 +87,13 @@ def _python_roots(lock_packages: list[dict], package: Path, include_workspace: b
 def python_dependencies(
     source: Path, package: Path, *, include_workspace: bool = False
 ) -> list[Dependency]:
-    """Return direct dependencies from the package entries in the nearest uv.lock."""
+    """Return dependency closures from the package entries in the nearest uv.lock."""
     locked = lock_root(source, package)
     lock_packages = tomllib.loads((locked / "uv.lock").read_text(encoding="utf-8")).get(
         "package", []
     )
     roots = _python_roots(lock_packages, package, include_workspace)
-    rows = []
+    queue = []
     for root in roots:
         scopes = [(root.get("dependencies", []), REQUIRED)]
         scopes.extend(
@@ -105,21 +106,43 @@ def python_dependencies(
         )
         for dependencies, dependency_type in scopes:
             for dependency in dependencies:
-                resolved = _python_package(lock_packages, dependency)
-                source_kind = resolved.get("source", {})
-                is_downloaded = "registry" in source_kind or "git" in source_kind
-                is_external_workspace = include_workspace and any(
-                    key in source_kind for key in ("editable", "directory")
+                queue.append((dependency, dependency_type))
+    rows = []
+    seen = set()
+    while queue:
+        dependency, dependency_type = queue.pop()
+        resolved = _python_package(lock_packages, dependency)
+        extras = dependency.get("extra", dependency.get("extras", []))
+        if isinstance(extras, str):
+            extras = [extras]
+        key = (
+            resolved["name"],
+            resolved["version"],
+            str(resolved.get("source", {})),
+            dependency_type,
+            tuple(sorted(extras)),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        source_kind = resolved.get("source", {})
+        is_downloaded = "registry" in source_kind or "git" in source_kind
+        is_external_workspace = include_workspace and any(
+            key in source_kind for key in ("editable", "directory")
+        )
+        if is_downloaded or is_external_workspace:
+            rows.append(
+                Dependency(
+                    name=str(resolved["name"]),
+                    version=str(resolved["version"]),
+                    language="Python",
+                    dependency_type=dependency_type,
                 )
-                if is_downloaded or is_external_workspace:
-                    rows.append(
-                        Dependency(
-                            name=str(resolved["name"]),
-                            version=str(resolved["version"]),
-                            language="Python",
-                            dependency_type=dependency_type,
-                        )
-                    )
+            )
+        queue.extend((child, dependency_type) for child in resolved.get("dependencies", []))
+        optional = resolved.get("optional-dependencies", {})
+        for extra in extras:
+            queue.extend((child, dependency_type) for child in optional.get(extra, []))
     return _deduplicate(rows)
 
 
@@ -147,7 +170,7 @@ def _rust_resolved_packages(metadata: dict, package_id: str, declaration: dict) 
 
 
 def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool = False):
-    """Return direct dependencies resolved by Cargo for the selected package or workspace."""
+    """Return dependency closures resolved by Cargo for the package or workspace."""
     manifest = (package / "Cargo.toml").resolve()
     packages = metadata.get("packages", [])
     selected = [item for item in packages if Path(item["manifest_path"]).resolve() == manifest]
@@ -157,7 +180,7 @@ def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool 
         member_ids = set(metadata.get("workspace_members", []))
         selected = [item for item in packages if item["id"] in member_ids]
     workspace_ids = set(metadata.get("workspace_members", []))
-    rows = []
+    queue = []
     for root in selected:
         for declaration in root.get("dependencies", []):
             kind = declaration.get("kind")
@@ -170,20 +193,37 @@ def rust_dependencies(package: Path, metadata: dict, *, include_workspace: bool 
             else:
                 raise ValueError(f"Unsupported Cargo dependency kind: {kind}")
             for resolved in _rust_resolved_packages(metadata, root["id"], declaration):
-                if include_workspace or resolved["id"] not in workspace_ids:
-                    rows.append(
-                        Dependency(
-                            name=str(resolved["name"]),
-                            version=str(resolved["version"]),
-                            language="Rust",
-                            dependency_type=dependency_type,
-                        )
-                    )
+                queue.append((resolved["id"], dependency_type))
+    package_by_id = {item["id"]: item for item in packages}
+    node_by_id = {item["id"]: item for item in metadata["resolve"]["nodes"]}
+    rows = []
+    seen = set()
+    while queue:
+        package_id, dependency_type = queue.pop()
+        key = (package_id, dependency_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved = package_by_id[package_id]
+        if include_workspace or package_id not in workspace_ids:
+            rows.append(
+                Dependency(
+                    name=str(resolved["name"]),
+                    version=str(resolved["version"]),
+                    language="Rust",
+                    dependency_type=dependency_type,
+                )
+            )
+        for dependency in node_by_id.get(package_id, {}).get("deps", []):
+            # Registry package dev-dependencies are not part of its usable graph. Workspace
+            # dev-dependencies are already seeded above with their own test-only scope.
+            if any(kind.get("kind") != "dev" for kind in dependency.get("dep_kinds", [])):
+                queue.append((dependency["pkg"], dependency_type))
     return _deduplicate(rows)
 
 
 def collect(root: Path) -> list[Dependency]:
-    """Collect direct dependencies from repository tools and every registered plugin."""
+    """Collect dependencies from repository tools and every registered plugin."""
     from scripts.licensing.generate import project_context, projects
 
     rows = []
@@ -200,14 +240,35 @@ def collect(root: Path) -> list[Dependency]:
                     )
                 )
     for name, manifest in discover(root).items():
-        if manifest["source"]["location"] not in {"wheel", "crate"}:
+        location = manifest["source"]["location"]
+        if location not in {"wheel", "crate"}:
             continue
-        lock = read_lock(root / "plugins" / name, manifest)
-        language = "Python" if manifest["source"]["location"] == "wheel" else "Rust"
-        rows.extend(
-            Dependency(item["name"], item["version"], language, REQUIRED)
-            for item in lock["artifacts"]
-        )
+        plugin = root / "plugins" / name
+        lock = read_lock(plugin, manifest)
+        if location == "wheel":
+            # A wheel source lock contains the root wheel and its complete locked closure.
+            rows.extend(
+                Dependency(item["name"], item["version"], "Python", REQUIRED)
+                for item in lock["artifacts"]
+            )
+            continue
+        seen = set()
+        for platform in manifest["platforms"]:
+            with tempfile.TemporaryDirectory(prefix="relay-package-dependencies-") as directory:
+                source, _, identity = prepare(
+                    plugin, manifest, platform, Path(directory), root / ".cache/packages"
+                )
+                artifact = identity["artifacts"][0]
+                if artifact["sha256"] in seen:
+                    continue
+                seen.add(artifact["sha256"])
+                rows.append(Dependency(artifact["name"], artifact["version"], "Rust", REQUIRED))
+                with project_context(source, manifest["toolchains"]["rust"]):
+                    rows.extend(
+                        rust_dependencies(
+                            source, collector._cargo_metadata(), include_workspace=True
+                        )
+                    )
     return _deduplicate(rows)
 
 

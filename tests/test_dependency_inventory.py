@@ -36,6 +36,12 @@ test = [{ name = "test-package" }, { name = "required-package" }]
 name = "required-package"
 version = "2.0.0"
 source = { registry = "https://example.invalid" }
+dependencies = [{ name = "required-transitive" }]
+
+[[package]]
+name = "required-transitive"
+version = "2.1.0"
+source = { registry = "https://example.invalid" }
 
 [[package]]
 name = "optional-package"
@@ -51,6 +57,12 @@ source = { registry = "https://example.invalid" }
 name = "test-package"
 version = "5.0.0"
 source = { registry = "https://example.invalid" }
+dependencies = [{ name = "test-transitive" }]
+
+[[package]]
+name = "test-transitive"
+version = "5.1.0"
+source = { registry = "https://example.invalid" }
 """.lstrip()
     )
 
@@ -58,7 +70,9 @@ source = { registry = "https://example.invalid" }
         Dependency("development-package", "4.0.0", "Python", DEVELOPMENT),
         Dependency("optional-package", "3.0.0", "Python", OPTIONAL),
         Dependency("required-package", "2.0.0", "Python", REQUIRED),
+        Dependency("required-transitive", "2.1.0", "Python", REQUIRED),
         Dependency("test-package", "5.0.0", "Python", TEST),
+        Dependency("test-transitive", "5.1.0", "Python", TEST),
     ]
 
 
@@ -111,16 +125,62 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
                 "dep_kinds": [{"kind": kind, "target": None} for kind in kinds],
             }
         )
+    required_transitive_id = "registry+example#required-transitive@2.1.0"
+    test_transitive_id = "registry+example#test-transitive@5.1.0"
+    packages.extend(
+        [
+            {
+                "id": required_transitive_id,
+                "name": "required-transitive",
+                "version": "2.1.0",
+                "manifest_path": "/registry/required-transitive/Cargo.toml",
+                "dependencies": [],
+            },
+            {
+                "id": test_transitive_id,
+                "name": "test-transitive",
+                "version": "5.1.0",
+                "manifest_path": "/registry/test-transitive/Cargo.toml",
+                "dependencies": [],
+            },
+        ]
+    )
     metadata = {
         "packages": packages,
         "workspace_members": [root_id],
-        "resolve": {"nodes": [{"id": root_id, "deps": resolved}]},
+        "resolve": {
+            "nodes": [
+                {"id": root_id, "deps": resolved},
+                {
+                    "id": "registry+example#required@2.0.0",
+                    "deps": [
+                        {
+                            "name": "required_transitive",
+                            "pkg": required_transitive_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+                {
+                    "id": "registry+example#tester@5.0.0",
+                    "deps": [
+                        {
+                            "name": "test_transitive",
+                            "pkg": test_transitive_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+            ]
+        },
     }
 
     assert rust_dependencies(tmp_path, metadata) == [
         Dependency("builder", "4.0.0", "Rust", DEVELOPMENT),
         Dependency("optional", "3.0.0", "Rust", OPTIONAL),
         Dependency("required", "2.0.0", "Rust", REQUIRED),
+        Dependency("required-transitive", "2.1.0", "Rust", REQUIRED),
+        Dependency("test-transitive", "5.1.0", "Rust", TEST),
         Dependency("tester", "5.0.0", "Rust", TEST),
     ]
 

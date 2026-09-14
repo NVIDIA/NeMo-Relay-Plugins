@@ -123,9 +123,8 @@ it does not block CI if the comparison fails.
 PR CI also creates a `dependency-inventory` artifact and links to it from the
 repository-check job summary. The artifact contains `dependencies.csv`. Each
 row gives the package name, exact locked version, language, and dependency type.
-It lists dependencies declared directly by the repository tools and plugins.
-Transitive packages remain in the attribution files but are not repeated in
-this direct-dependency report.
+It lists both direct and transitive dependencies from the resolved lockfile
+graphs for the repository tools and plugins.
 
 The dependency types are `direct + required`, `direct + optional`,
 `development-only`, and `test-only`. Python dependencies in the `test` or
@@ -134,6 +133,10 @@ development-only. Rust build dependencies are development-only, and Rust dev
 dependencies are test-only. If the same exact package has more than one use,
 the report keeps its broadest use in this order: required, optional,
 development, then test.
+
+Transitive packages inherit the type of the direct dependency path that reaches
+them. If more than one path reaches a package, the same broadest-use order
+applies.
 
 To create the same CSV locally, run:
 
