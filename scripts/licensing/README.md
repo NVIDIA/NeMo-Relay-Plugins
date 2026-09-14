@@ -123,20 +123,24 @@ it does not block CI if the comparison fails.
 PR CI also creates a `dependency-inventory` artifact and links to it from the
 repository-check job summary. The artifact contains `dependencies.csv`. Each
 row gives the package name, exact locked version, language, and dependency type.
-It lists both direct and transitive dependencies from the resolved lockfile
+It lists both direct and indirect dependencies from the resolved lockfile
 graphs for the repository tools and plugins.
 
-The dependency types are `direct + required`, `transitive + required`,
-`direct + optional`, `transitive + optional`, `development-only`, and
-`test-only`. Python dependencies in the `test` or `tests` development group are
-test-only. Other Python development groups are development-only. Rust build
-dependencies are development-only, and Rust dev dependencies are test-only.
+The dependency types are `direct + required`, `direct + optional`,
+`indirect + required`, `indirect + optional`, `test-only`, and
+`development-only`. Python dependencies in the `test` or `tests` development
+group are test-only. Other Python development groups are development-only. Rust
+build dependencies are development-only, and Rust dev dependencies are
+test-only.
 
-Transitive packages inherit the required or optional scope of the direct
+Indirect packages inherit the required or optional scope of the direct
 dependency path that reaches them. If more than one path reaches a package, the
 report keeps its broadest use. Required wins over optional, runtime wins over
-development and test, and direct wins over transitive within the same runtime
+development and test, and direct wins over indirect within the same runtime
 scope.
+
+Rows are sorted by language and then by dependency type in the order listed
+above. Package name and version provide stable ordering within each type.
 
 To create the same CSV locally, run:
 

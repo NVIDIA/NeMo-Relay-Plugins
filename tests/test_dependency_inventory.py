@@ -7,9 +7,9 @@ from scripts.licensing.dependency_inventory import (
     DEVELOPMENT,
     DIRECT_OPTIONAL,
     DIRECT_REQUIRED,
+    INDIRECT_OPTIONAL,
+    INDIRECT_REQUIRED,
     TEST,
-    TRANSITIVE_OPTIONAL,
-    TRANSITIVE_REQUIRED,
     Dependency,
     python_dependencies,
     rust_dependencies,
@@ -75,13 +75,13 @@ source = { registry = "https://example.invalid" }
     )
 
     assert python_dependencies(tmp_path, tmp_path) == [
-        Dependency("development-package", "4.0.0", "Python", DEVELOPMENT),
-        Dependency("optional-package", "3.0.0", "Python", DIRECT_OPTIONAL),
-        Dependency("optional-transitive", "3.1.0", "Python", TRANSITIVE_OPTIONAL),
         Dependency("required-package", "2.0.0", "Python", DIRECT_REQUIRED),
-        Dependency("required-transitive", "2.1.0", "Python", TRANSITIVE_REQUIRED),
+        Dependency("optional-package", "3.0.0", "Python", DIRECT_OPTIONAL),
+        Dependency("required-transitive", "2.1.0", "Python", INDIRECT_REQUIRED),
+        Dependency("optional-transitive", "3.1.0", "Python", INDIRECT_OPTIONAL),
         Dependency("test-package", "5.0.0", "Python", TEST),
         Dependency("test-transitive", "5.1.0", "Python", TEST),
+        Dependency("development-package", "4.0.0", "Python", DEVELOPMENT),
     ]
 
 
@@ -203,17 +203,44 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
     }
 
     assert rust_dependencies(tmp_path, metadata) == [
-        Dependency("builder", "4.0.0", "Rust", DEVELOPMENT),
-        Dependency("optional", "3.0.0", "Rust", DIRECT_OPTIONAL),
-        Dependency("optional-transitive", "3.1.0", "Rust", TRANSITIVE_OPTIONAL),
         Dependency("required", "2.0.0", "Rust", DIRECT_REQUIRED),
-        Dependency("required-transitive", "2.1.0", "Rust", TRANSITIVE_REQUIRED),
+        Dependency("optional", "3.0.0", "Rust", DIRECT_OPTIONAL),
+        Dependency("required-transitive", "2.1.0", "Rust", INDIRECT_REQUIRED),
+        Dependency("optional-transitive", "3.1.0", "Rust", INDIRECT_OPTIONAL),
         Dependency("test-transitive", "5.1.0", "Rust", TEST),
         Dependency("tester", "5.0.0", "Rust", TEST),
+        Dependency("builder", "4.0.0", "Rust", DEVELOPMENT),
     ]
 
 
-def test_csv_has_requested_columns_and_one_row_per_package(tmp_path):
+def test_csv_has_requested_columns_and_order(tmp_path):
+    output = tmp_path / "dependencies.csv"
+    write_csv(
+        [
+            Dependency("development", "1.0", "Rust", DEVELOPMENT),
+            Dependency("test", "1.0", "Rust", TEST),
+            Dependency("indirect-optional", "1.0", "Rust", INDIRECT_OPTIONAL),
+            Dependency("indirect-required", "1.0", "Rust", INDIRECT_REQUIRED),
+            Dependency("direct-optional", "1.0", "Rust", DIRECT_OPTIONAL),
+            Dependency("direct-required", "1.0", "Rust", DIRECT_REQUIRED),
+            Dependency("python-package", "1.0", "Python", TEST),
+        ],
+        output,
+    )
+    with output.open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert [(row["language"], row["dependency_type"]) for row in rows] == [
+        ("Python", TEST),
+        ("Rust", DIRECT_REQUIRED),
+        ("Rust", DIRECT_OPTIONAL),
+        ("Rust", INDIRECT_REQUIRED),
+        ("Rust", INDIRECT_OPTIONAL),
+        ("Rust", TEST),
+        ("Rust", DEVELOPMENT),
+    ]
+
+
+def test_broadest_use_wins_when_package_has_multiple_types(tmp_path):
     output = tmp_path / "dependencies.csv"
     write_csv(
         [

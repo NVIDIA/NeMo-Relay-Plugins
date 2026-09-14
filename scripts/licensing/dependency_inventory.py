@@ -17,17 +17,25 @@ from scripts.package_sources import prepare, read_lock
 
 DIRECT_REQUIRED = "direct + required"
 DIRECT_OPTIONAL = "direct + optional"
-TRANSITIVE_REQUIRED = "transitive + required"
-TRANSITIVE_OPTIONAL = "transitive + optional"
+INDIRECT_REQUIRED = "indirect + required"
+INDIRECT_OPTIONAL = "indirect + optional"
 DEVELOPMENT = "development-only"
 TEST = "test-only"
-TYPE_ORDER = {
+TYPE_PRECEDENCE = {
     DIRECT_REQUIRED: 0,
-    TRANSITIVE_REQUIRED: 1,
+    INDIRECT_REQUIRED: 1,
     DIRECT_OPTIONAL: 2,
-    TRANSITIVE_OPTIONAL: 3,
+    INDIRECT_OPTIONAL: 3,
     DEVELOPMENT: 4,
     TEST: 5,
+}
+TYPE_SORT_ORDER = {
+    DIRECT_REQUIRED: 0,
+    DIRECT_OPTIONAL: 1,
+    INDIRECT_REQUIRED: 2,
+    INDIRECT_OPTIONAL: 3,
+    TEST: 4,
+    DEVELOPMENT: 5,
 }
 
 
@@ -49,18 +57,26 @@ def _deduplicate(rows: Iterable[Dependency]) -> list[Dependency]:
     for row in rows:
         key = (_normalized_name(row.name), row.version, row.language)
         current = selected.get(key)
-        if current is None or TYPE_ORDER[row.dependency_type] < TYPE_ORDER[current.dependency_type]:
+        if (
+            current is None
+            or TYPE_PRECEDENCE[row.dependency_type] < TYPE_PRECEDENCE[current.dependency_type]
+        ):
             selected[key] = row
     return sorted(
         selected.values(),
-        key=lambda row: (row.language.lower(), row.name.lower(), row.version),
+        key=lambda row: (
+            row.language.lower(),
+            TYPE_SORT_ORDER[row.dependency_type],
+            row.name.lower(),
+            row.version,
+        ),
     )
 
 
-def _transitive_type(dependency_type: str) -> str:
+def _indirect_type(dependency_type: str) -> str:
     return {
-        DIRECT_REQUIRED: TRANSITIVE_REQUIRED,
-        DIRECT_OPTIONAL: TRANSITIVE_OPTIONAL,
+        DIRECT_REQUIRED: INDIRECT_REQUIRED,
+        DIRECT_OPTIONAL: INDIRECT_OPTIONAL,
     }.get(dependency_type, dependency_type)
 
 
@@ -155,7 +171,7 @@ def python_dependencies(
                     dependency_type=dependency_type,
                 )
             )
-        child_type = _transitive_type(dependency_type)
+        child_type = _indirect_type(dependency_type)
         queue.extend((child, child_type) for child in resolved.get("dependencies", []))
         optional = resolved.get("optional-dependencies", {})
         for extra in extras:
@@ -209,9 +225,9 @@ def rust_dependencies(
                 dependency_type = DEVELOPMENT
             elif kind is None:
                 if declaration.get("optional"):
-                    dependency_type = DIRECT_OPTIONAL if direct else TRANSITIVE_OPTIONAL
+                    dependency_type = DIRECT_OPTIONAL if direct else INDIRECT_OPTIONAL
                 else:
-                    dependency_type = DIRECT_REQUIRED if direct else TRANSITIVE_REQUIRED
+                    dependency_type = DIRECT_REQUIRED if direct else INDIRECT_REQUIRED
             else:
                 raise ValueError(f"Unsupported Cargo dependency kind: {kind}")
             for resolved in _rust_resolved_packages(metadata, root["id"], declaration):
@@ -240,7 +256,7 @@ def rust_dependencies(
             # Registry package dev-dependencies are not part of its usable graph. Workspace
             # dev-dependencies are already seeded above with their own test-only scope.
             if any(kind.get("kind") != "dev" for kind in dependency.get("dep_kinds", [])):
-                queue.append((dependency["pkg"], _transitive_type(dependency_type)))
+                queue.append((dependency["pkg"], _indirect_type(dependency_type)))
     return _deduplicate(rows)
 
 
@@ -278,7 +294,7 @@ def collect(root: Path) -> list[Dependency]:
                     if _normalized_name(item["name"])
                     == _normalized_name(manifest["source"]["package"])
                     and item["version"] == manifest["source"]["version"]
-                    else TRANSITIVE_REQUIRED,
+                    else INDIRECT_REQUIRED,
                 )
                 for item in lock["artifacts"]
             )
