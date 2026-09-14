@@ -1282,8 +1282,9 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "nemo-relay"
 version = "0.9.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=65eb82bf3d788986512246abf7f8ab7a520f28d9#65eb82bf3d788986512246abf7f8ab7a520f28d9"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=073c913f47d4c8ed10f3af5bf781ae58f6dee20a#073c913f47d4c8ed10f3af5bf781ae58f6dee20a"
 dependencies = [
+ "async-trait",
  "base64 0.22.1",
  "bitflags",
  "chrono",
@@ -1295,6 +1296,7 @@ dependencies = [
  "nemo-relay-types",
  "object_store",
  "opentelemetry",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
@@ -1325,7 +1327,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-plugin"
 version = "0.9.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=65eb82bf3d788986512246abf7f8ab7a520f28d9#65eb82bf3d788986512246abf7f8ab7a520f28d9"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=073c913f47d4c8ed10f3af5bf781ae58f6dee20a#073c913f47d4c8ed10f3af5bf781ae58f6dee20a"
 dependencies = [
  "futures",
  "nemo-relay-types",
@@ -1353,7 +1355,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-types"
 version = "0.9.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=65eb82bf3d788986512246abf7f8ab7a520f28d9#65eb82bf3d788986512246abf7f8ab7a520f28d9"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=073c913f47d4c8ed10f3af5bf781ae58f6dee20a#073c913f47d4c8ed10f3af5bf781ae58f6dee20a"
 dependencies = [
  "bitflags",
  "chrono",

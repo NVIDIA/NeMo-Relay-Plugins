@@ -56,7 +56,7 @@ is optional: `registration_control.enabled` defaults to `false`. Its other defau
 The callback blocks targets whose names start with `documentation-controlled-`
 and returns the reason. It returns `None` to leave other matching targets enabled.
 The kinds, target name, and reason must not be empty. See
-[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 for the full rules, including which plugin owns each control.
 
 To try the plugin from this folder, create temporary Relay settings, add the
@@ -82,7 +82,7 @@ rm -rf -- "$relay_tmp"
 
 ## SDK and test host
 
-This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+This example needs the Relay 0.9 API from upstream `release/0.9`. Until those SDK
 packages are published, its package locks use an exact Git commit. Its
 `release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
 for the source version and local changes.
