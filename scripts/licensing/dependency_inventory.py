@@ -45,6 +45,7 @@ class Dependency:
     version: str
     language: str
     dependency_type: str
+    plugins: tuple[str, ...] = ()
 
 
 def _normalized_name(name: str) -> str:
@@ -57,11 +58,21 @@ def _deduplicate(rows: Iterable[Dependency]) -> list[Dependency]:
     for row in rows:
         key = (_normalized_name(row.name), row.version, row.language)
         current = selected.get(key)
-        if (
-            current is None
-            or TYPE_PRECEDENCE[row.dependency_type] < TYPE_PRECEDENCE[current.dependency_type]
-        ):
+        if current is None:
             selected[key] = row
+            continue
+        preferred = (
+            row
+            if TYPE_PRECEDENCE[row.dependency_type] < TYPE_PRECEDENCE[current.dependency_type]
+            else current
+        )
+        selected[key] = Dependency(
+            name=preferred.name,
+            version=preferred.version,
+            language=preferred.language,
+            dependency_type=preferred.dependency_type,
+            plugins=tuple(sorted(set(current.plugins) | set(row.plugins))),
+        )
     return sorted(
         selected.values(),
         key=lambda row: (
@@ -117,7 +128,11 @@ def _python_roots(lock_packages: list[dict], package: Path, include_workspace: b
 
 
 def python_dependencies(
-    source: Path, package: Path, *, include_workspace: bool = False
+    source: Path,
+    package: Path,
+    *,
+    include_workspace: bool = False,
+    plugin: str | None = None,
 ) -> list[Dependency]:
     """Return dependency closures from the package entries in the nearest uv.lock."""
     locked = lock_root(source, package)
@@ -169,6 +184,7 @@ def python_dependencies(
                     version=str(resolved["version"]),
                     language="Python",
                     dependency_type=dependency_type,
+                    plugins=(plugin,) if plugin else (),
                 )
             )
         child_type = _indirect_type(dependency_type)
@@ -203,7 +219,12 @@ def _rust_resolved_packages(metadata: dict, package_id: str, declaration: dict) 
 
 
 def rust_dependencies(
-    package: Path, metadata: dict, *, include_workspace: bool = False, direct: bool = True
+    package: Path,
+    metadata: dict,
+    *,
+    include_workspace: bool = False,
+    direct: bool = True,
+    plugin: str | None = None,
 ):
     """Return dependency closures resolved by Cargo for the package or workspace."""
     manifest = (package / "Cargo.toml").resolve()
@@ -250,6 +271,7 @@ def rust_dependencies(
                     version=str(resolved["version"]),
                     language="Rust",
                     dependency_type=dependency_type,
+                    plugins=(plugin,) if plugin else (),
                 )
             )
         for dependency in node_by_id.get(package_id, {}).get("deps", []):
@@ -265,9 +287,17 @@ def collect(root: Path) -> list[Dependency]:
     from scripts.licensing.generate import project_context, projects
 
     rows = []
-    for source, _, toolchain, languages, include_workspace, package in projects(root):
+    for source, destination, toolchain, languages, include_workspace, package in projects(root):
+        plugin = destination.name if destination.parts[0] == "plugins" else None
         if "Python" in languages:
-            rows.extend(python_dependencies(source, package, include_workspace=include_workspace))
+            rows.extend(
+                python_dependencies(
+                    source,
+                    package,
+                    include_workspace=include_workspace,
+                    plugin=plugin,
+                )
+            )
         if "Rust" in languages:
             with project_context(source, toolchain):
                 rows.extend(
@@ -275,6 +305,7 @@ def collect(root: Path) -> list[Dependency]:
                         package,
                         collector._cargo_metadata(),
                         include_workspace=include_workspace,
+                        plugin=plugin,
                     )
                 )
     for name, manifest in discover(root).items():
@@ -295,6 +326,7 @@ def collect(root: Path) -> list[Dependency]:
                     == _normalized_name(manifest["source"]["package"])
                     and item["version"] == manifest["source"]["version"]
                     else INDIRECT_REQUIRED,
+                    (name,),
                 )
                 for item in lock["artifacts"]
             )
@@ -310,7 +342,13 @@ def collect(root: Path) -> list[Dependency]:
                     continue
                 seen.add(artifact["sha256"])
                 rows.append(
-                    Dependency(artifact["name"], artifact["version"], "Rust", DIRECT_REQUIRED)
+                    Dependency(
+                        artifact["name"],
+                        artifact["version"],
+                        "Rust",
+                        DIRECT_REQUIRED,
+                        (name,),
+                    )
                 )
                 with project_context(source, manifest["toolchains"]["rust"]):
                     rows.extend(
@@ -319,6 +357,7 @@ def collect(root: Path) -> list[Dependency]:
                             collector._cargo_metadata(),
                             include_workspace=True,
                             direct=False,
+                            plugin=name,
                         )
                     )
     return _deduplicate(rows)
@@ -328,9 +367,17 @@ def write_csv(rows: Iterable[Dependency], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream, lineterminator="\n")
-        writer.writerow(["name", "version", "language", "dependency_type"])
+        writer.writerow(["name", "version", "language", "dependency_type", "plugins"])
         for row in _deduplicate(rows):
-            writer.writerow([row.name, row.version, row.language, row.dependency_type])
+            writer.writerow(
+                [
+                    row.name,
+                    row.version,
+                    row.language,
+                    row.dependency_type,
+                    "; ".join(row.plugins),
+                ]
+            )
 
 
 def main() -> None:

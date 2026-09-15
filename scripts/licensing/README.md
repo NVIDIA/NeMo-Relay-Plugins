@@ -122,9 +122,10 @@ it does not block CI if the comparison fails.
 
 PR CI also creates a `dependency-inventory` artifact and links to it from the
 repository-check job summary. The artifact contains `dependencies.csv`. Each
-row gives the package name, exact locked version, language, and dependency type.
-It lists both direct and indirect dependencies from the resolved lockfile
-graphs for the repository tools and plugins.
+row gives the package name, exact locked version, language, dependency type,
+and the plugins that depend on it. It lists both direct and indirect
+dependencies from the resolved lockfile graphs for the repository tools and
+plugins.
 
 The dependency types are `direct + required`, `direct + optional`,
 `indirect + required`, `indirect + optional`, `test-only`, and
@@ -141,6 +142,8 @@ scope.
 
 Rows are sorted by language and then by dependency type in the order listed
 above. Package name and version provide stable ordering within each type.
+The `plugins` cell is a semicolon-separated, alphabetically sorted list. It is
+empty when a package is used only by repository tooling and not by a plugin.
 
 To create the same CSV locally, run:
 

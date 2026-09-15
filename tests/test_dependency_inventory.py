@@ -83,6 +83,9 @@ source = { registry = "https://example.invalid" }
         Dependency("test-transitive", "5.1.0", "Python", TEST),
         Dependency("development-package", "4.0.0", "Python", DEVELOPMENT),
     ]
+    assert {
+        row.plugins for row in python_dependencies(tmp_path, tmp_path, plugin="python-plugin")
+    } == {("python-plugin",)}
 
 
 def test_rust_dependency_types_and_locked_versions(tmp_path):
@@ -211,6 +214,9 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
         Dependency("tester", "5.0.0", "Rust", TEST),
         Dependency("builder", "4.0.0", "Rust", DEVELOPMENT),
     ]
+    assert {row.plugins for row in rust_dependencies(tmp_path, metadata, plugin="rust-plugin")} == {
+        ("rust-plugin",)
+    }
 
 
 def test_csv_has_requested_columns_and_order(tmp_path):
@@ -238,14 +244,15 @@ def test_csv_has_requested_columns_and_order(tmp_path):
         ("Rust", TEST),
         ("Rust", DEVELOPMENT),
     ]
+    assert all(row["plugins"] == "" for row in rows)
 
 
-def test_broadest_use_wins_when_package_has_multiple_types(tmp_path):
+def test_broadest_use_wins_and_plugins_are_merged(tmp_path):
     output = tmp_path / "dependencies.csv"
     write_csv(
         [
-            Dependency("example", "1.0", "Python", TEST),
-            Dependency("example", "1.0", "Python", DIRECT_REQUIRED),
+            Dependency("example", "1.0", "Python", TEST, ("plugin-b",)),
+            Dependency("example", "1.0", "Python", DIRECT_REQUIRED, ("plugin-a",)),
         ],
         output,
     )
@@ -256,5 +263,6 @@ def test_broadest_use_wins_when_package_has_multiple_types(tmp_path):
                 "version": "1.0",
                 "language": "Python",
                 "dependency_type": DIRECT_REQUIRED,
+                "plugins": "plugin-a; plugin-b",
             }
         ]
