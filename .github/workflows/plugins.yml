@@ -24,10 +24,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            plugins/**/uv.lock
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
-      - run: python -m pip install uv==0.11.32
       - run: uv sync --locked --group test
       - id: plan
         env:
@@ -63,24 +69,32 @@ jobs:
         with:
           name: plugin-plan
           path: ${{ runner.temp }}/plugin-plan
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            plugins/**/uv.lock
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
           architecture: ${{ endsWith(matrix.platform, 'arm64') && 'arm64' || 'x64' }}
-      - run: python -m pip install uv==0.11.32
       - run: uv sync --locked
       - name: Verify Windows console shutdown
         if: runner.os == 'Windows'
         run: uv run --locked --group test pytest -q tests/test_smoke.py
-      - if: matrix.rust != ''
-        env:
-          PLUGIN_RUST: ${{ matrix.rust }}
-        run: rustup toolchain install "$PLUGIN_RUST" --profile minimal
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        if: matrix.rust != ''
+        with:
+          toolchain: ${{ matrix.rust }}
+          cache: false
       - name: Install Rust license tool
         if: matrix.rust != ''
-        env:
-          PLUGIN_RUST: ${{ matrix.rust }}
-        run: cargo "+$PLUGIN_RUST" install cargo-about --version 0.9.1 --locked --features cli
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cargo-about@0.9.1
+          fallback: none
       - name: Build, test, package, and install the bundle
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,13 +120,27 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            plugins/**/uv.lock
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
-      - run: python -m pip install uv==0.11.32
       - run: uv sync --locked --group test
-      - run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt
-      - run: cargo +1.96.1 install cargo-about --version 0.9.1 --locked --features cli
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          toolchain: 1.96.1
+          components: rustfmt
+          cache: false
+      - name: Install Rust license tool
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cargo-about@0.9.1
+          fallback: none
       - name: Run pre-commit checks
         run: >-
           uv run --locked --group test pre-commit run --all-files --show-diff-on-failure
@@ -181,10 +209,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            plugins/**/uv.lock
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
-      - run: python -m pip install uv==0.11.32
       - run: uv sync --locked
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
