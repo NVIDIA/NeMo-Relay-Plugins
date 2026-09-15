@@ -84,17 +84,11 @@ jobs:
       - name: Verify Windows console shutdown
         if: runner.os == 'Windows'
         run: uv run --locked --group test pytest -q tests/test_smoke.py
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      - name: Set up Rust tools
         if: matrix.rust != ''
+        uses: ./.github/actions/setup-rust-tools
         with:
           toolchain: ${{ matrix.rust }}
-          cache: false
-      - name: Install Rust license tool
-        if: matrix.rust != ''
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
-        with:
-          tool: cargo-about@0.9.1
-          fallback: none
       - name: Build, test, package, and install the bundle
         env:
           GH_TOKEN: ${{ github.token }}
@@ -131,16 +125,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: uv sync --locked --group test
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      - name: Set up Rust tools
+        uses: ./.github/actions/setup-rust-tools
         with:
           toolchain: 1.96.1
           components: rustfmt
-          cache: false
-      - name: Install Rust license tool
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
-        with:
-          tool: cargo-about@0.9.1
-          fallback: none
       - name: Run pre-commit checks
         run: >-
           uv run --locked --group test pre-commit run --all-files --show-diff-on-failure

@@ -133,12 +133,15 @@ def test_ci_downloads_tools_without_source_build_fallbacks():
     for job_name in ["build", "licenses"]:
         steps = jobs[job_name]["steps"]
         install = next(
-            step for step in steps if step.get("uses", "").startswith("taiki-e/install-action@")
+            step for step in steps if step.get("uses") == "./.github/actions/setup-rust-tools"
         )
-        assert install["with"] == {"tool": "cargo-about@0.9.1", "fallback": "none"}
-        assert all(
-            "cargo" not in step.get("run", "") or " install " not in step["run"] for step in steps
-        )
+        assert install["with"]["toolchain"]
+
+    action_path = ROOT / ".github/actions/setup-rust-tools/action.yml"
+    action_text = action_path.read_text()
+    assert "cargo install" not in action_text
+    assert "cargo-about/releases/download" in action_text
+    assert "expected_sha256" in action_text
 
 
 @pytest.mark.parametrize("hook_id", ["ruff-check", "ruff-format", "rust-fmt", "actionlint"])

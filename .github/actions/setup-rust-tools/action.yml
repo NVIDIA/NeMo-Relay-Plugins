@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Set up Rust tools
+description: Install the pinned Rust toolchain and prebuilt cargo-about binary
+inputs:
+  toolchain:
+    description: Rust toolchain version
+    required: true
+  components:
+    description: Optional Rust component to install
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      shell: bash
+      env:
+        RUST_TOOLCHAIN: ${{ inputs.toolchain }}
+        RUST_COMPONENTS: ${{ inputs.components }}
+      run: |
+        if [[ -n "$RUST_COMPONENTS" ]]; then
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component "$RUST_COMPONENTS"
+        else
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+        fi
+
+    - name: Install prebuilt cargo-about
+      shell: bash
+      env:
+        CARGO_ABOUT_VERSION: 0.9.1
+      run: |
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)
+            target=x86_64-unknown-linux-musl
+            expected_sha256=c0e7dc6f5d74b0beec5c0053d39ab24514c717d19acd91886907a22457ea9e98
+            ;;
+          Linux-ARM64)
+            target=aarch64-unknown-linux-musl
+            expected_sha256=d13ff19fedb566f859831c0b71c22120e7c598c7753d5f1018dd7353c6ced02a
+            ;;
+          macOS-ARM64)
+            target=aarch64-apple-darwin
+            expected_sha256=6a38fe166d17a674269d4373256c0b6bd93acc2553e12de0517cb9ecc73c9c02
+            ;;
+          Windows-X64)
+            target=x86_64-pc-windows-msvc
+            expected_sha256=318893aff6b9efd60f70470f5827b9577ae20a805cf9732d5612862a78508581
+            ;;
+          *)
+            echo "Unsupported cargo-about platform: $RUNNER_OS-$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
+
+        archive="cargo-about-${CARGO_ABOUT_VERSION}-${target}.tar.gz"
+        url="https://github.com/EmbarkStudios/cargo-about/releases/download/${CARGO_ABOUT_VERSION}/${archive}"
+        install_dir="$RUNNER_TEMP/cargo-about-${CARGO_ABOUT_VERSION}"
+        mkdir -p "$install_dir"
+        curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+          --output "$RUNNER_TEMP/$archive" "$url"
+
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual_sha256="$(sha256sum "$RUNNER_TEMP/$archive" | awk '{print $1}')"
+        else
+          actual_sha256="$(shasum -a 256 "$RUNNER_TEMP/$archive" | awk '{print $1}')"
+        fi
+        if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+          echo "cargo-about archive checksum mismatch" >&2
+          exit 1
+        fi
+
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$install_dir" --strip-components=1
+        binary=cargo-about
+        if [[ "$RUNNER_OS" == Windows ]]; then
+          binary=cargo-about.exe
+        fi
+        "$install_dir/$binary" --version
+        printf '%s\n' "$install_dir" >> "$GITHUB_PATH"
