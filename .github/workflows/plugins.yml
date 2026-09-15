@@ -91,7 +91,7 @@ jobs:
           cache: false
       - name: Install Rust license tool
         if: matrix.rust != ''
-        uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2.77.6
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
         with:
           tool: cargo-about@0.9.1
           fallback: none
@@ -137,7 +137,7 @@ jobs:
           components: rustfmt
           cache: false
       - name: Install Rust license tool
-        uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2.77.6
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
         with:
           tool: cargo-about@0.9.1
           fallback: none
