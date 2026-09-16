@@ -1,7 +1,42 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Switchyard plugin
 
-This folder builds and releases the [Switchyard routing plugin](https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin). Its code lives in the Switchyard repository. The `release.toml` file sets the exact source commit and selects the plugin’s Rust package, called a crate. The build downloads the full Switchyard workspace so the crate can use other packages there.
+## Summary
+
+This plugin sends supported model requests through routes in a
+[Switchyard](https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin)
+deployment. It uses Switchyard's targets, client pools, routing algorithms,
+retry policies, and route validation. Relay loads the Rust shared library
+directly into its own process.
+
+**Load and enable.** The bundled `relay-plugin.toml` registers
+`nvidia.switchyard`. The manifest starts disabled. Register the manifest, add
+a Switchyard deployment and Relay trust policy to the plugin configuration,
+then enable it. Relay loads the library the next time it starts:
+
+```sh
+nemo-relay plugins add --user ./switchyard-plugin/relay-plugin.toml
+nemo-relay plugins enable nvidia.switchyard
+```
+
+Relay cannot enable this plugin without a valid deployment. See the
+[upstream plugin documentation](https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin#configure-relay)
+for configuration fields and examples.
+
+**Distributed artifacts.** A release provides one `.tar.gz` archive for each
+supported Linux or macOS platform and one `.zip` archive for each supported
+Windows platform. Each archive has a `.sha256` checksum and a `.json`
+build-metadata sidecar. The archive contains the platform shared library, the
+completed runtime manifest, the configuration schema, license notices, Rust
+dependency attributions, and third-party notices for linked Switchyard crates.
+
+## Build and test
+
+This folder builds and releases the Switchyard routing plugin. Its code lives
+in the Switchyard repository. The `release.toml` file sets the exact source
+commit and selects the plugin's Rust package, called a crate. The build
+downloads the full Switchyard workspace so the crate can use other packages
+there.
 
 From this repository's root:
 
@@ -13,6 +48,8 @@ This command builds the plugin, runs Switchyard’s plugin tests, and uses its p
 
 To use newer Switchyard code, update `source.sha` to the commit you want. `source.ref` records the branch or tag you plan to track; it does not update the source on its own.
 
-The release version here is separate from the Switchyard workspace version. SDK package versions come from Switchyard’s Cargo lockfile. A `[relay]` setting changes only the Relay host used for tests.
+The release version here is separate from the Switchyard workspace version.
+SDK package versions come from Switchyard's Cargo lockfile. A `[relay]` setting
+changes only the Relay host used for tests.
 
-Bundles include Switchyard’s `LICENSE` and `NOTICE`, plus `ATTRIBUTIONS-Rust.md` for its Rust packages. See the upstream documentation for deployment settings and supported features.
+See the upstream documentation for deployment settings and supported features.
