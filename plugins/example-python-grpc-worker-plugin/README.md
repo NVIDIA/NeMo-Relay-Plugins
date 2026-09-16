@@ -5,9 +5,35 @@ SPDX-License-Identifier: Apache-2.0
 
 # Python gRPC Worker Plugin
 
-This plugin’s release name is `example-python-grpc-worker-plugin`.
+## Summary
+
+This example shows how a Python worker can validate settings, handle requests
+and events, process streams, clean up call state, and control middleware. Relay
+runs it as a separate process and communicates with it through `grpc-v1`.
+
+**Load and enable.** The bundled `relay-plugin.toml` registers
+`examples.python_grpc_worker`. Relay creates a Python environment from the
+bundled source during installation. When Relay starts with the plugin enabled,
+it launches the worker. The manifest starts disabled. After configuring the
+plugin and Relay's trust policy, run:
+
+```sh
+nemo-relay plugins add --user ./example-python-grpc-worker-plugin/relay-plugin.toml
+nemo-relay plugins enable examples.python_grpc_worker
+```
+
+**Distributed artifacts.** A release provides one `.tar.gz` archive for each
+supported Linux or macOS platform and one `.zip` archive for Windows x86_64.
+Each archive has a `.sha256` checksum and a `.json` build-metadata sidecar. The
+archive contains the Python source package, `pyproject.toml`, `uv.lock`, the
+completed runtime manifest, the configuration schema, upstream notes, license
+notices, and Python dependency attributions.
+
+## Build and test
+
+This plugin's release name is `example-python-grpc-worker-plugin`.
 [`release.toml`](release.toml) defines its build and release settings.
-`relay-plugin.toml` tells Relay how to load the plugin.
+`relay-plugin.toml` is the source template for the bundled runtime manifest.
 
 From the repository root, use this command to build and test the plugin, create
 a bundle, and check that the installed bundle works:
@@ -19,9 +45,9 @@ uv run --locked python -m scripts.plugins run example-python-grpc-worker-plugin
 See [UPSTREAM.md](UPSTREAM.md) for the original source commit.
 Use [the release guide](../../RELEASE.md) to install a bundle and set Relay’s trust rules.
 
-This is the Python worker from the plugin authoring guide. It checks the example’s
-settings and uses the safe plugin hooks in `grpc-v1`, the protocol for talking to Relay.
-A hook lets a plugin handle an event or change a request.
+This is the Python worker from the plugin authoring guide. It checks the
+example's settings and uses the safe plugin hooks in `grpc-v1`. A hook lets a
+plugin handle an event or change a request.
 
 The example shows how to keep result annotations and Relay’s usage records intact.
 It gives each call its own codec helpers, which encode and decode data. It also
