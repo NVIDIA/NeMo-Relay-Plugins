@@ -141,6 +141,10 @@ jobs:
         with:
           tool: cargo-about@0.9.1
           fallback: none
+      - name: Create dependency inventory
+        run: >-
+          uv run --locked python -m scripts.licensing.dependency_inventory
+          --output "$RUNNER_TEMP/dependencies.csv"
       - name: Run pre-commit checks
         run: >-
           uv run --locked --group test pre-commit run --all-files --show-diff-on-failure
@@ -175,6 +179,22 @@ jobs:
             ${{ runner.temp }}/license-diff.status
           if-no-files-found: warn
           retention-days: 14
+      - name: Upload dependency inventory
+        id: dependency-inventory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-inventory
+          path: ${{ runner.temp }}/dependencies.csv
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Link dependency inventory
+        if: always() && steps.dependency-inventory.outputs.artifact-url != ''
+        env:
+          DEPENDENCY_ARTIFACT_URL: ${{ steps.dependency-inventory.outputs.artifact-url }}
+        run: |
+          echo "### Dependency inventory" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download the dependency inventory CSV]($DEPENDENCY_ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
 
   required:
     name: Plugin checks
