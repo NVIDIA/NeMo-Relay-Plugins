@@ -99,12 +99,12 @@ Another returns `None` to allow `allowed_registration_name`. This shows both
 decisions in one plugin run. The kinds, target names, and reason must not be
 empty. The two target names must differ when this control is enabled.
 
-Read [Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+Read [Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 before enabling the control for a target found at runtime.
 
 ## SDK and test host
 
-This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+This example needs the Relay 0.9 API from upstream `release/0.9`. Until those SDK
 packages are published, its package locks use an exact Git commit. Its
 `release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
 for the source version and local changes.
@@ -114,4 +114,4 @@ for the source version and local changes.
 The `documentation_tool_request` hook adds keys to a tool's arguments. This
 works inside Relay, but the pi extension only accepts changes that keep the
 argument structure. Using pi with this example enabled blocks every tool call.
-See the [pi argument-transform notes](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/nemo-relay-cli/pi.mdx) before using them together.
+See the [pi argument-transform notes](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/nemo-relay-cli/pi.mdx) before using them together.

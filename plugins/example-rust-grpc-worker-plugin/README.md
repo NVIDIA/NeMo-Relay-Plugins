@@ -80,12 +80,12 @@ events as they pass through Relay. The control starts disabled, with these defau
 The callback blocks targets whose names start with `documentation-controlled-`
 and returns the reason. It returns `None` to leave other matching targets enabled.
 All three values must not be empty. See
-[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 for how to find target names and how Relay removes the control when the worker stops.
 
 ## SDK and test host
 
-This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+This example needs the Relay 0.9 API from upstream `release/0.9`. Until those SDK
 packages are published, its package locks use an exact Git commit. Its
 `release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
 for the source version and local changes.
