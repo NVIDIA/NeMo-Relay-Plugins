@@ -5,9 +5,36 @@ SPDX-License-Identifier: Apache-2.0
 
 # Rust gRPC Worker Plugin
 
-This plugin’s release name is `example-rust-grpc-worker-plugin`.
+## Summary
+
+This example shows how a Rust worker can validate settings, pass requests to
+the next handler, process stream items, record event marks, and clean up call
+state. Relay runs it as a separate process and communicates with it through
+`grpc-v1`.
+
+**Load and enable.** The bundled `relay-plugin.toml` registers
+`examples.rust_grpc_worker` and points Relay to the platform worker executable.
+When Relay starts with the plugin enabled, it launches that executable. The
+manifest starts disabled. After configuring the plugin and Relay's trust
+policy, run:
+
+```sh
+nemo-relay plugins add --user ./example-rust-grpc-worker-plugin/relay-plugin.toml
+nemo-relay plugins enable examples.rust_grpc_worker
+```
+
+**Distributed artifacts.** A release provides one `.tar.gz` archive for each
+supported Linux or macOS platform and one `.zip` archive for each supported
+Windows platform. Each archive has a `.sha256` checksum and a `.json`
+build-metadata sidecar. The archive contains the platform worker executable,
+the completed runtime manifest, the configuration schema, upstream notes,
+license notices, and Rust dependency attributions.
+
+## Build and test
+
+This plugin's release name is `example-rust-grpc-worker-plugin`.
 [`release.toml`](release.toml) defines its build and release settings.
-`relay-plugin.toml` tells Relay how to load the plugin.
+`relay-plugin.toml` is the source template for the bundled runtime manifest.
 
 From the repository root, use this command to build and test the plugin, create
 a bundle, and check that the installed bundle works:
@@ -20,8 +47,8 @@ See [UPSTREAM.md](UPSTREAM.md) for the original source commit.
 Use [the release guide](../../RELEASE.md) to install a bundle and set Relay’s trust rules.
 
 This is the Rust worker from the NeMo Relay plugin authoring guide. It checks
-the example’s settings and uses the safe hooks in `grpc-v1`, the protocol for
-talking to Relay. A hook lets a plugin handle an event or change a request.
+the example's settings and uses the safe hooks in `grpc-v1`. A hook lets a
+plugin handle an event or change a request.
 
 The example passes requests to the next handler and processes stream items as
 they arrive. It gives each call its own helpers to encode and decode data. It
@@ -53,12 +80,12 @@ events as they pass through Relay. The control starts disabled, with these defau
 The callback blocks targets whose names start with `documentation-controlled-`
 and returns the reason. It returns `None` to leave other matching targets enabled.
 All three values must not be empty. See
-[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+[Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 for how to find target names and how Relay removes the control when the worker stops.
 
 ## SDK and test host
 
-This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+This example needs the Relay 0.9 API from upstream `release/0.9`. Until those SDK
 packages are published, its package locks use an exact Git commit. Its
 `release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
 for the source version and local changes.

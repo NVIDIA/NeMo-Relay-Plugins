@@ -5,9 +5,35 @@ SPDX-License-Identifier: Apache-2.0
 
 # Rust Native Dynamic Plugin
 
-This plugin’s release name is `example-rust-native-plugin`.
+## Summary
+
+This example shows how a native Rust plugin can subscribe to events and add
+typed hooks for event sanitizing, tool calls, and large language model (LLM)
+calls. Relay loads the shared library directly into its own process.
+
+**Load and enable.** The bundled `relay-plugin.toml` registers
+`examples.rust_native_policy` and names the platform shared library and its
+registration symbol. When Relay starts with the plugin enabled, it loads that
+library. The manifest starts disabled. After configuring the plugin and Relay's
+trust policy, run:
+
+```sh
+nemo-relay plugins add --user ./example-rust-native-plugin/relay-plugin.toml
+nemo-relay plugins enable examples.rust_native_policy
+```
+
+**Distributed artifacts.** A release provides one `.tar.gz` archive for each
+supported Linux or macOS platform and one `.zip` archive for each supported
+Windows platform. Each archive has a `.sha256` checksum and a `.json`
+build-metadata sidecar. The archive contains the platform shared library, the
+completed runtime manifest, the configuration schema, upstream notes, license
+notices, and Rust dependency attributions.
+
+## Build and test
+
+This plugin's release name is `example-rust-native-plugin`.
 [`release.toml`](release.toml) defines its build and release settings.
-`relay-plugin.toml` tells Relay how to load the plugin.
+`relay-plugin.toml` is the source template for the bundled runtime manifest.
 
 From the repository root, use this command to build and test the plugin, create
 a bundle, and check that the installed bundle works:
@@ -73,12 +99,12 @@ Another returns `None` to allow `allowed_registration_name`. This shows both
 decisions in one plugin run. The kinds, target names, and reason must not be
 empty. The two target names must differ when this control is enabled.
 
-Read [Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
+Read [Conditional Middleware Guardrails](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/about-nemo-relay/concepts/conditional-middleware-guardrails.mdx)
 before enabling the control for a target found at runtime.
 
 ## SDK and test host
 
-This example needs the Relay 0.9 API from upstream `main`. Until those SDK
+This example needs the Relay 0.9 API from upstream `release/0.9`. Until those SDK
 packages are published, its package locks use an exact Git commit. Its
 `release.toml` selects a test host built from that commit. See [UPSTREAM.md](UPSTREAM.md)
 for the source version and local changes.
@@ -88,4 +114,4 @@ for the source version and local changes.
 The `documentation_tool_request` hook adds keys to a tool's arguments. This
 works inside Relay, but the pi extension only accepts changes that keep the
 argument structure. Using pi with this example enabled blocks every tool call.
-See the [pi argument-transform notes](https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/docs/nemo-relay-cli/pi.mdx) before using them together.
+See the [pi argument-transform notes](https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/docs/nemo-relay-cli/pi.mdx) before using them together.

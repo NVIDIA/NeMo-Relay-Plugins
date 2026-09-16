@@ -77,7 +77,7 @@ wheels = [
 [[package]]
 name = "nemo-relay-plugin"
 version = "0.9.0"
-source = { git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=65eb82bf3d788986512246abf7f8ab7a520f28d9#65eb82bf3d788986512246abf7f8ab7a520f28d9" }
+source = { git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=073c913f47d4c8ed10f3af5bf781ae58f6dee20a#073c913f47d4c8ed10f3af5bf781ae58f6dee20a" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
@@ -98,7 +98,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "nemo-relay-plugin", git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=65eb82bf3d788986512246abf7f8ab7a520f28d9" }]
+requires-dist = [{ name = "nemo-relay-plugin", git = "https://github.com/NVIDIA/NeMo-Relay.git?subdirectory=python%2Fplugin&rev=073c913f47d4c8ed10f3af5bf781ae58f6dee20a" }]
 
 [package.metadata.requires-dev]
 test = [

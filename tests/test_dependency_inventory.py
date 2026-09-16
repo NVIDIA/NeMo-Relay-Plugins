@@ -88,6 +88,48 @@ source = { registry = "https://example.invalid" }
     } == {("python-plugin",)}
 
 
+def test_python_workspace_inventory_starts_at_the_selected_package(tmp_path):
+    package = tmp_path / "plugin"
+    package.mkdir()
+    (package / "pyproject.toml").write_text('[project]\nname = "plugin"\n')
+    (tmp_path / "uv.lock").write_text(
+        """
+[[package]]
+name = "plugin"
+version = "1.0.0"
+source = { editable = "plugin" }
+dependencies = [{ name = "shared" }]
+
+[[package]]
+name = "shared"
+version = "1.0.0"
+source = { editable = "shared" }
+dependencies = [{ name = "reachable" }]
+
+[[package]]
+name = "unrelated-workspace-package"
+version = "1.0.0"
+source = { editable = "unrelated" }
+dependencies = [{ name = "unrelated" }]
+
+[[package]]
+name = "reachable"
+version = "2.0.0"
+source = { registry = "https://example.invalid" }
+
+[[package]]
+name = "unrelated"
+version = "3.0.0"
+source = { registry = "https://example.invalid" }
+""".lstrip()
+    )
+
+    assert python_dependencies(tmp_path, package, include_workspace=True) == [
+        Dependency("shared", "1.0.0", "Python", DIRECT_REQUIRED),
+        Dependency("reachable", "2.0.0", "Python", INDIRECT_REQUIRED),
+    ]
+
+
 def test_rust_dependency_types_and_locked_versions(tmp_path):
     manifest = tmp_path / "Cargo.toml"
     manifest.touch()
@@ -217,6 +259,95 @@ def test_rust_dependency_types_and_locked_versions(tmp_path):
     assert {row.plugins for row in rust_dependencies(tmp_path, metadata, plugin="rust-plugin")} == {
         ("rust-plugin",)
     }
+
+
+def test_rust_workspace_inventory_starts_at_the_selected_package(tmp_path):
+    manifest = tmp_path / "Cargo.toml"
+    manifest.touch()
+    root_id = "path+file:///example#plugin@1.0.0"
+    shared_id = "path+file:///example/shared#shared@1.0.0"
+    unrelated_id = "path+file:///example/unrelated#unrelated@1.0.0"
+    reachable_id = "registry+example#reachable@2.0.0"
+    unrelated_dependency_id = "registry+example#unrelated@3.0.0"
+    metadata = {
+        "packages": [
+            {
+                "id": root_id,
+                "name": "plugin",
+                "version": "1.0.0",
+                "manifest_path": str(manifest),
+                "dependencies": [{"name": "shared", "kind": None, "target": None}],
+            },
+            {
+                "id": shared_id,
+                "name": "shared",
+                "version": "1.0.0",
+                "manifest_path": str(tmp_path / "shared/Cargo.toml"),
+                "dependencies": [],
+            },
+            {
+                "id": unrelated_id,
+                "name": "unrelated-workspace-package",
+                "version": "1.0.0",
+                "manifest_path": str(tmp_path / "unrelated/Cargo.toml"),
+                "dependencies": [],
+            },
+            {
+                "id": reachable_id,
+                "name": "reachable",
+                "version": "2.0.0",
+                "manifest_path": "/registry/reachable/Cargo.toml",
+                "dependencies": [],
+            },
+            {
+                "id": unrelated_dependency_id,
+                "name": "unrelated",
+                "version": "3.0.0",
+                "manifest_path": "/registry/unrelated/Cargo.toml",
+                "dependencies": [],
+            },
+        ],
+        "workspace_members": [root_id, shared_id, unrelated_id],
+        "resolve": {
+            "nodes": [
+                {
+                    "id": root_id,
+                    "deps": [
+                        {
+                            "name": "shared",
+                            "pkg": shared_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+                {
+                    "id": shared_id,
+                    "deps": [
+                        {
+                            "name": "reachable",
+                            "pkg": reachable_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+                {
+                    "id": unrelated_id,
+                    "deps": [
+                        {
+                            "name": "unrelated",
+                            "pkg": unrelated_dependency_id,
+                            "dep_kinds": [{"kind": None, "target": None}],
+                        }
+                    ],
+                },
+            ]
+        },
+    }
+
+    assert rust_dependencies(tmp_path, metadata, include_workspace=True) == [
+        Dependency("shared", "1.0.0", "Rust", DIRECT_REQUIRED),
+        Dependency("reachable", "2.0.0", "Rust", INDIRECT_REQUIRED),
+    ]
 
 
 def test_csv_has_requested_columns_and_order(tmp_path):

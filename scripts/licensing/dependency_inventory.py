@@ -108,20 +108,13 @@ def _python_package(lock_packages: list[dict], dependency: dict) -> dict:
     return candidates[0]
 
 
-def _python_roots(lock_packages: list[dict], package: Path, include_workspace: bool) -> list[dict]:
+def _python_roots(lock_packages: list[dict], package: Path) -> list[dict]:
     project = tomllib.loads((package / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    if include_workspace:
-        roots = [
-            item
-            for item in lock_packages
-            if any(key in item.get("source", {}) for key in ("editable", "directory"))
-        ]
-    else:
-        roots = [
-            item
-            for item in lock_packages
-            if _normalized_name(str(item.get("name", ""))) == _normalized_name(project["name"])
-        ]
+    roots = [
+        item
+        for item in lock_packages
+        if _normalized_name(str(item.get("name", ""))) == _normalized_name(project["name"])
+    ]
     if not roots:
         raise ValueError(f"No locked Python package matches {project['name']}")
     return roots
@@ -139,7 +132,7 @@ def python_dependencies(
     lock_packages = tomllib.loads((locked / "uv.lock").read_text(encoding="utf-8")).get(
         "package", []
     )
-    roots = _python_roots(lock_packages, package, include_workspace)
+    roots = _python_roots(lock_packages, package)
     queue = []
     for root in roots:
         scopes = [(root.get("dependencies", []), DIRECT_REQUIRED)]
@@ -232,9 +225,6 @@ def rust_dependencies(
     selected = [item for item in packages if Path(item["manifest_path"]).resolve() == manifest]
     if not selected:
         raise ValueError(f"No Cargo package matches manifest: {manifest}")
-    if include_workspace:
-        member_ids = set(metadata.get("workspace_members", []))
-        selected = [item for item in packages if item["id"] in member_ids]
     workspace_ids = set(metadata.get("workspace_members", []))
     queue = []
     for root in selected:

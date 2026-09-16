@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Original source
 
-This example was synced from NVIDIA NeMo Relay's `main` branch at commit
-`65eb82bf3d788986512246abf7f8ab7a520f28d9`.
+This example was synced from NVIDIA NeMo Relay's `release/0.9` branch at commit
+`073c913f47d4c8ed10f3af5bf781ae58f6dee20a`.
 
-[View the original source](https://github.com/NVIDIA/NeMo-Relay/tree/65eb82bf3d788986512246abf7f8ab7a520f28d9/examples/rust-native-plugin).
+[View the original source](https://github.com/NVIDIA/NeMo-Relay/tree/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/examples/rust-native-plugin).
 
 The release name is specific to this repository. The original package name and
 the plugin ID used by Relay have not changed.

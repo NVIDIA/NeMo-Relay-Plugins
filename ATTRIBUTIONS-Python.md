@@ -1176,7 +1176,7 @@ THE SOFTWARE.
 ### Licenses
 License: `Apache-2.0`
 
-  - `https://github.com/NVIDIA/NeMo-Relay/blob/65eb82bf3d788986512246abf7f8ab7a520f28d9/LICENSE`:
+  - `https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/LICENSE`:
 ```
                                  Apache License
                            Version 2.0, January 2004
