@@ -122,6 +122,25 @@ def test_ci_uses_same_required_hooks():
     assert "licenses" in workflow["jobs"]["required"]["needs"]
 
 
+def test_ci_downloads_tools_without_source_build_fallbacks():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/plugins.yml").read_text())
+    jobs = workflow["jobs"]
+    for job_name in ["plan", "build", "licenses", "release"]:
+        steps = jobs[job_name]["steps"]
+        assert any(step.get("uses", "").startswith("astral-sh/setup-uv@") for step in steps)
+        assert all("pip install uv" not in step.get("run", "") for step in steps)
+
+    for job_name in ["build", "licenses"]:
+        steps = jobs[job_name]["steps"]
+        install = next(
+            step for step in steps if step.get("uses", "").startswith("taiki-e/install-action@")
+        )
+        assert install["with"] == {"tool": "cargo-about@0.9.1", "fallback": "none"}
+        assert all(
+            "cargo" not in step.get("run", "") or " install " not in step["run"] for step in steps
+        )
+
+
 @pytest.mark.parametrize("hook_id", ["ruff-check", "ruff-format", "rust-fmt", "actionlint"])
 def test_configurable_checks_run_for_settings_changes_and_deletions(hook_id):
     config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
