@@ -22,6 +22,9 @@ conflicts = [[
     { package = "nemoguardrails-nemo-relay", extra = "guardrails-ai" },
 ]]
 
+[options]
+prerelease-mode = "if-necessary"
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
