@@ -1,4 +1,8 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Plugins from wheels and crates
 
 A wheel (`.whl`) is a built Python package. A crate (`.crate`) contains Rust
