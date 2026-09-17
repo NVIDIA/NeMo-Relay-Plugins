@@ -10,6 +10,7 @@ from scripts.tasks import (
     Context,
     executable_filename,
     library_filename,
+    package_locked_python_project,
     run,
     write_runtime_manifest,
 )
@@ -86,3 +87,59 @@ def test_materialized_manifest_digests_the_packaged_artifact(tmp_path):
 def test_materialized_manifest_requires_declared_artifact(tmp_path):
     with pytest.raises(FileNotFoundError):
         write_runtime_manifest(tmp_path, {"source": {"artifact": "absent"}, "integrity": {}})
+
+
+def test_locked_python_project_adds_relocatable_wheel_adapter(tmp_path, monkeypatch):
+    import json
+    import zipfile
+
+    plugin = tmp_path / "plugins" / "worker"
+    bundle = tmp_path / "output" / "bundle"
+    artifact = bundle / "worker_package" / "worker.py"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("def main(): return None\n")
+    wheel = tmp_path / "worker_package-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as stream:
+        stream.writestr("worker_package/worker.py", artifact.read_bytes())
+    wheels = tmp_path / "output" / "wheels"
+    wheels.mkdir()
+    (wheels / wheel.name).write_bytes(wheel.read_bytes())
+    identity = {
+        "platform": "linux-x86_64",
+        "python": "3.11",
+        "artifacts": [
+            {
+                "name": "worker-package",
+                "filename": wheel.name,
+                "sha256": "0" * 64,
+            }
+        ],
+    }
+    (tmp_path / "output" / "package-source.json").write_text(json.dumps(identity))
+    monkeypatch.setattr(
+        "scripts.package_sources.prepare_locked_project_wheelhouse",
+        lambda *args: identity,
+    )
+    release = {"artifacts": {"bundle": "bundle"}, "toolchains": {"python": "3.11"}}
+    context = Context(
+        plugin,
+        plugin,
+        plugin,
+        tmp_path / "output",
+        tmp_path / "target",
+        "linux-x86_64",
+        release,
+    )
+    manifest = {
+        "source": {"artifact": "worker_package/worker.py"},
+        "load": {"runtime": "python"},
+    }
+    assert package_locked_python_project(context, wheel, manifest) == identity
+    adapter = tomllib.loads((bundle / "pyproject.toml").read_text())
+    assert adapter["build-system"] == {
+        "requires": [],
+        "build-backend": "relay_wheel_backend",
+        "backend-path": ["."],
+    }
+    assert (bundle / "wheelhouse" / wheel.name).is_file()
+    assert manifest["source"]["manifest_root"] == "."

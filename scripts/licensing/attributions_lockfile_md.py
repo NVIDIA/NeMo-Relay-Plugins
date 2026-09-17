@@ -33,6 +33,7 @@ CONFIG = Path(__file__).with_name("about.toml")
 OUTPUT = None
 MARKDOWN_CODE_FENCE = "```\n"
 MARKDOWN_CODE_BLOCK_END = "```\n\n"
+_GIT_CONFLICT_MARKER = re.compile(r"^(?:<{7}|={7}|>{7})(?: |$)")
 
 
 class RenderedPythonPackage(TypedDict):
@@ -113,6 +114,33 @@ def _md_inline_safe(s: str) -> str:
     return f"`{s}`"
 
 
+def _markdown_code_block(text: str) -> str:
+    """Render license text without exposing Git markers or trailing whitespace.
+
+    CommonMark removes up to the opening fence's indentation from each content
+    line. Indenting the entire fence by one space therefore preserves the
+    rendered text while keeping marker-like license content safe for Git's
+    whitespace checks.
+    """
+
+    # Horizontal whitespace at the end of a line has no material meaning in a
+    # fenced license block, but it makes generated attribution files fail
+    # ``git diff --check``. Normalize it at the final rendering boundary so
+    # every metadata source follows the same rule.
+    payload = "\n".join(line.rstrip(" \t") for line in text.splitlines()) + "\n"
+    lines = payload.splitlines(keepends=True)
+    if any(_GIT_CONFLICT_MARKER.match(line.rstrip("\r\n")) for line in lines):
+        indent = " "
+        return (
+            indent
+            + MARKDOWN_CODE_FENCE
+            + "".join(indent + line if line.rstrip("\r\n") else line for line in lines)
+            + indent
+            + MARKDOWN_CODE_BLOCK_END
+        )
+    return MARKDOWN_CODE_FENCE + payload + MARKDOWN_CODE_BLOCK_END
+
+
 def _is_unknown_value(s: str) -> bool:
     """Return true for empty metadata values and common unknown placeholders."""
     return not s.strip() or s.strip().upper() == "UNKNOWN"
@@ -186,14 +214,14 @@ def _normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _lockfile_external_packages() -> dict[str, dict[str, Any]]:
+def _lockfile_external_packages() -> dict[tuple[str, str], dict[str, Any]]:
     """Return locked external Python packages, including exact Git sources."""
     import tomllib
 
     with open(ROOT / "uv.lock", "rb") as f:
         lock: dict[str, Any] = tomllib.load(f)
     return {
-        _normalize_package_name(str(pkg["name"])): pkg
+        (_normalize_package_name(str(pkg["name"])), str(pkg["version"])): pkg
         for pkg in cast(list[dict[str, Any]], lock.get("package", []))
         if pkg.get("name")
         and pkg.get("version")
@@ -215,9 +243,7 @@ def _render_python_package(
     parts.append(f"License: {_md_inline_safe(license_name)}\n\n")
     for path_label, text in license_texts:
         parts.append(f"  - {_md_inline_safe(path_label)}:\n")
-        parts.append(MARKDOWN_CODE_FENCE)
-        parts.append(text if text.endswith("\n") else text + "\n")
-        parts.append(MARKDOWN_CODE_BLOCK_END)
+        parts.append(_markdown_code_block(text))
 
 
 def _cargo_workspace_members() -> set[str]:
@@ -395,9 +421,7 @@ def _render_rust_metadata_fallback_attribution(crate: dict[str, Any]) -> tuple[s
     if license_files:
         for label, text in license_files:
             parts.append(f"### License File: {label}\n")
-            parts.append(MARKDOWN_CODE_FENCE)
-            parts.append(text if text.endswith("\n") else text + "\n")
-            parts.append(MARKDOWN_CODE_BLOCK_END)
+            parts.append(_markdown_code_block(text))
     else:
         raise ValueError(f"Missing upstream license text for {name} {version}")
 
@@ -439,10 +463,10 @@ def _render_rust_crate_attribution(
             f"**Repository URL**: {repo}\n",
             f"**License Type(s)**: {license_id}\n",
             f"### License: https://spdx.org/licenses/{license_id}.html\n",
-            MARKDOWN_CODE_FENCE,
-            license_text,
-            "\n",
-            MARKDOWN_CODE_BLOCK_END,
+            # Preserve the historical blank line before the closing fence in
+            # generated Rust attributions while still escaping marker-like
+            # license lines.
+            _markdown_code_block(license_text + "\n"),
         ]
     )
     return name, version, rendered
@@ -640,29 +664,17 @@ def _license_path_depth(path: str) -> int:
     return normalized.count("/") if normalized else 0
 
 
-def _choose_declared_license(candidates: list[tuple[int, str, str, str]]) -> tuple[str, str] | None:
-    """Choose one canonical declared License-File match.
+def _deduplicate_license_texts(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Keep declared files in metadata order while dropping duplicate content."""
 
-    Candidates are ``(declared_index, relative_path, display_path, text)``.
-    Only ``LICENSE``-style basenames participate so metadata does not pull in
-    vendored subtree notices when a package-level license exists.
-    """
-    license_named = [
-        candidate
-        for candidate in candidates
-        if "license" in Path(candidate[1].replace("\\", "/")).name.lower()
-    ]
-    if not license_named:
-        return None
-    _, _, display_path, text = min(
-        license_named,
-        key=lambda candidate: (
-            _license_path_depth(candidate[1]),
-            candidate[0],
-            candidate[1].lower(),
-        ),
-    )
-    return display_path, text
+    unique: list[tuple[str, str]] = []
+    seen_texts: set[str] = set()
+    for display_path, text in candidates:
+        if text in seen_texts:
+            continue
+        seen_texts.add(text)
+        unique.append((display_path, text))
+    return unique
 
 
 def _choose_heuristic_license(candidates: list[tuple[str, str, str]]) -> tuple[str, str] | None:
@@ -686,19 +698,16 @@ def _choose_heuristic_license(candidates: list[tuple[str, str, str]]) -> tuple[s
 def _declared_wheel_license_texts(
     zf: zipfile.ZipFile, dist_info_dir: str, declared_files: list[str]
 ) -> list[tuple[str, str]]:
-    """Return the best declared wheel license file, if the wheel bundles one."""
-    declared_candidates: list[tuple[int, str, str, str]] = []
-    for declared_index, rel in enumerate(declared_files):
+    """Return every declared wheel license or notice file with unique content."""
+    declared_candidates: list[tuple[str, str]] = []
+    for rel in declared_files:
         candidates = [f"{dist_info_dir}/licenses/{rel}", f"{dist_info_dir}/{rel}"]
         for candidate in candidates:
             text = _extract_zip_text(zf, candidate)
             if text and _is_useful_license_text(text):
-                declared_candidates.append(
-                    (declared_index, rel, _pypi_license_path_display(candidate), text),
-                )
+                declared_candidates.append((_pypi_license_path_display(candidate), text))
                 break
-    selected_declared = _choose_declared_license(declared_candidates)
-    return [selected_declared] if selected_declared else []
+    return _deduplicate_license_texts(declared_candidates)
 
 
 def _heuristic_wheel_license_texts(
@@ -709,7 +718,13 @@ def _heuristic_wheel_license_texts(
         [
             name
             for name in zf.namelist()
-            if name.startswith(f"{dist_info_dir}/licenses/") or name.startswith(f"{dist_info_dir}/")
+            if name.startswith(f"{dist_info_dir}/licenses/")
+            or name.startswith(f"{dist_info_dir}/")
+            # Some wheels put their own license at ``package/LICENSE`` rather
+            # than under dist-info. Restrict this fallback to the archive root
+            # and one top-level package so vendored dependency notices cannot
+            # be mistaken for the wheel's license.
+            or name.strip("/").count("/") <= 1
         ]
     )
     heuristic_candidates: list[tuple[str, str, str]] = []
@@ -746,17 +761,14 @@ def _wheel_metadata_from_bytes(
 def _declared_sdist_license_texts(
     tf: tarfile.TarFile, root_dir: str, declared_files: list[str]
 ) -> list[tuple[str, str]]:
-    """Return the best declared sdist license file, if the sdist bundles one."""
-    declared_candidates: list[tuple[int, str, str, str]] = []
-    for declared_index, rel in enumerate(declared_files):
+    """Return every declared sdist license or notice file with unique content."""
+    declared_candidates: list[tuple[str, str]] = []
+    for rel in declared_files:
         candidate = f"{root_dir}/{rel}"
         text = _extract_tar_text(tf, candidate)
         if text and _is_useful_license_text(text):
-            declared_candidates.append(
-                (declared_index, rel, _relative_archive_path_display(candidate), text),
-            )
-    selected_declared = _choose_declared_license(declared_candidates)
-    return [selected_declared] if selected_declared else []
+            declared_candidates.append((_relative_archive_path_display(candidate), text))
+    return _deduplicate_license_texts(declared_candidates)
 
 
 def _heuristic_sdist_license_texts(tf: tarfile.TarFile, root_dir: str) -> list[tuple[str, str]]:
@@ -909,14 +921,23 @@ def _python_upstream_licenses(pkg: dict[str, Any]) -> list[tuple[str, str]]:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             path = next(name for name in zf.namelist() if name.endswith(".dist-info/METADATA"))
             metadata = Parser().parsestr(zf.read(path).decode("utf-8"))
+        repositories = []
+        homepage = metadata.get("Home-page", "").strip()
+        if homepage:
+            repositories.append(homepage)
         for project_url in metadata.get_all("Project-URL", []):
             label, _, repository = project_url.partition(",")
-            if label.lower() not in {"repository", "source", "source code"}:
+            if label.lower() not in {"homepage", "repository", "source", "source code"}:
                 continue
-            repository = repository.strip()
+            repositories.append(repository.strip())
+        for repository in dict.fromkeys(repositories):
             if not re.fullmatch(r"https://github.com/[\w.-]+/[\w.-]+/?", repository):
                 continue
-            for tag in [pkg["version"], "v" + pkg["version"]]:
+            tags = _python_version_tag_candidates(str(pkg["version"]))
+            if pkg.get("name"):
+                # Monorepos commonly tag package releases as ``name==version``.
+                tags.append(f"{pkg['name']}=={pkg['version']}")
+            for tag in tags:
                 ref = "refs/tags/" + tag
                 output = subprocess.check_output(
                     ["git", "ls-remote", "--tags", repository, ref, ref + "^{}"],
@@ -929,6 +950,17 @@ def _python_upstream_licenses(pkg: dict[str, Any]) -> list[tuple[str, str]]:
                 if sha:
                     return _upstream_licenses(repository, sha)
     return []
+
+
+def _python_version_tag_candidates(version: str) -> list[str]:
+    """Return common immutable Git tag spellings for one Python version."""
+
+    versions = [version]
+    prerelease = re.fullmatch(r"(\d+(?:\.\d+)*)(a|b|rc)(\d+)", version)
+    if prerelease:
+        label = {"a": "alpha", "b": "beta", "rc": "rc"}[prerelease[2]]
+        versions.append(f"{prerelease[1]}-{label}.{prerelease[3]}")
+    return list(dict.fromkeys(tag for item in versions for tag in (item, "v" + item)))
 
 
 def _lockfile_only_python_package(pkg: dict[str, Any]) -> RenderedPythonPackage:
@@ -980,13 +1012,17 @@ def _git_python_license(pkg: dict[str, Any]) -> tuple[str, list[tuple[str, str]]
 
 
 def _lockfile_python_packages(
-    lockfile_pkgs: dict[str, dict[str, Any]], *, own_name: str, seen: set[str] | None = None
+    lockfile_pkgs: dict[tuple[str, str], dict[str, Any]],
+    *,
+    own_name: str,
+    seen: set[tuple[str, str]] | None = None,
 ) -> list[RenderedPythonPackage]:
     """Render third-party Python packages directly from uv.lock."""
     seen = seen or set()
     packages: list[RenderedPythonPackage] = []
-    for normalized, pkg in lockfile_pkgs.items():
-        if normalized == own_name or normalized in seen:
+    for key, pkg in lockfile_pkgs.items():
+        normalized, _version = key
+        if normalized == own_name or key in seen:
             continue
         packages.append(_lockfile_only_python_package(pkg))
     return packages

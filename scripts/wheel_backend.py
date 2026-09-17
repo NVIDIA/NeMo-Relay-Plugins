@@ -15,6 +15,9 @@ import sys
 import zipfile
 from pathlib import Path
 
+ADAPTER_DISTRIBUTION_NAME = "relay-wheel-environment"
+ADAPTER_DISTRIBUTION_VERSION = "1.0"
+
 
 def get_requires_for_build_wheel(config_settings=None):
     return []
@@ -38,13 +41,13 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
             raise ValueError("bundled wheel digest mismatch")
         requirements.append(f"Requires-Dist: {item['name']} @ {path.as_uri()}")
-    distribution = "relay_wheel_environment"
-    dist_info = f"{distribution}-1.0.dist-info"
+    distribution = ADAPTER_DISTRIBUTION_NAME.replace("-", "_")
+    dist_info = f"{distribution}-{ADAPTER_DISTRIBUTION_VERSION}.dist-info"
     files = {
         f"{dist_info}/METADATA": (
-            "Metadata-Version: 2.3\nName: relay-wheel-environment\nVersion: 1.0\n"
-            + "\n".join(requirements)
-            + "\n"
+            "Metadata-Version: 2.3\n"
+            f"Name: {ADAPTER_DISTRIBUTION_NAME}\n"
+            f"Version: {ADAPTER_DISTRIBUTION_VERSION}\n" + "\n".join(requirements) + "\n"
         ).encode(),
         f"{dist_info}/WHEEL": b"Wheel-Version: 1.0\nGenerator: relay-wheel-adapter\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
     }
@@ -55,7 +58,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         writer.writerow([name, "sha256=" + digest, len(data)])
     writer.writerow([f"{dist_info}/RECORD", "", ""])
     files[f"{dist_info}/RECORD"] = record.getvalue().encode()
-    filename = f"{distribution}-1.0-py3-none-any.whl"
+    filename = f"{distribution}-{ADAPTER_DISTRIBUTION_VERSION}-py3-none-any.whl"
     with zipfile.ZipFile(Path(wheel_directory) / filename, "w", zipfile.ZIP_DEFLATED) as stream:
         for name, data in files.items():
             stream.writestr(name, data)

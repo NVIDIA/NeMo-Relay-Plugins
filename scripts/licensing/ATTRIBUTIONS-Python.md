@@ -583,6 +583,121 @@ SOFTWARE AND DOCUMENTATION, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 DAMAGE.
 ```
 
+  - `AUTHORS`:
+```
+Nodeenv is written and maintained by Eugene Kalinin.
+
+Patches and Suggestions
+```````````````````````
+
+-  jhermann
+-  Anthony Sottile
+-  anatoly techtonik
+-  ivan hilkov
+-  Vincent Bernat
+-  Kyle P Davis
+-  Kefu Chai
+-  Elias Kunnas
+-  Avimitin
+-  Adam Johnson
+-  Pierre Le Marre
+-  Eashwar Ranganathan
+-  Doug Turnbull
+-  Anton Parkhomenko
+-  Vyacheslav Levit
+-  Travis Miller
+-  syndbg
+-  Spencer Rathbun
+-  Robert Schwebel
+-  Luis Orduz
+-  Lucas Cimon
+-  Lispython
+-  Leonardo Fedalto
+-  Kyle P Davis
+-  Jon Winn
+-  Duncan Bellamy
+-  Dennis Flanigan
+-  Christian Clauss
+-  Chris Beaven
+-  Cerem Cem ASLAN
+-  Bruno Oliveira
+-  Andrzej Pragacz
+-  Andrey Mishchenko
+-  Alex Couper
+-  0Xellos
+-  zjeuhpiung liu
+-  Zenobius Jiricek
+-  zbw
+-  Yi-Feng Tzeng
+-  Willem Jan Withagen
+-  Walter dos Santos Filho
+-  Vladimír Gorej
+-  Vizonex
+-  Vincent Bernat
+-  urbandove
+-  Uman Shahzad
+-  Tomi Belan
+-  Tom Whitwell
+-  Tom Parker-Shemilt
+-  Tim Gates
+-  Thomas Bechtold
+-  Terseus
+-  Stan Seibert
+-  Shubhang Mani
+-  Sam James
+-  sam
+-  Rob Moss
+-  Rik
+-  rely10
+-  rachmadaniHaryono
+-  proItheus
+-  Philipp Dieter
+-  Philipp A
+-  Mrinal Wadhwa
+-  Michal Kolodziejski
+-  Michał Górny
+-  michael
+-  Maxim Mazurok
+-  max0x53
+-  Max R
+-  Max Melamed
+-  Max Liebkies
+-  Marc-Antoine Parent
+-  Marc Abramowitz
+-  Laust Rud Jacobsen
+-  Ken Struys
+-  Kai Weber
+-  Josh Soref
+-  Johnny Lim
+-  Joby Harding
+-  jiho
+-  Jesse Dhillon
+-  Jeremy Banks
+-  Jelle van der Waa
+-  Hugo van Kemenade
+-  Hugo
+-  Han Yeong-woo
+-  Geoffrey Huntley
+-  Fabricio C Zuardi
+-  Eashwar Ranganathan
+-  Duncan Bellamy
+-  dkgitdev
+-  dhilipsiva
+-  Dennis Flanigan
+-  Dan North
+-  Dan Fuchs
+-  Damien Nozay
+-  cmehay
+-  Brian Jacobel
+-  Ben Davis
+-  Ben Beasley
+-  Bastien Gérard
+-  Augusto Andreoli
+-  Andreas Wirooks
+-  Alexey Poryadin
+-  Aarni Koskela
+```
+
 ## packaging (26.3)
 
 ### Licenses
@@ -593,6 +708,213 @@ License: `Apache-2.0 OR BSD-2-Clause`
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
+```
+
+  - `LICENSE.APACHE`:
+```
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+```
+
+  - `LICENSE.BSD`:
+```
+Copyright (c) Donald Stufft and individual contributors.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    1. Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in the
+       documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 ## platformdirs (4.11.8)
@@ -715,6 +1037,306 @@ THE SOFTWARE.
 
 ### Licenses
 License: `BSD-2-Clause`
+
+  - `AUTHORS`:
+```
+Pygments is written and maintained by Georg Brandl <georg@python.org>.
+
+Major developers are Tim Hatch <tim@timhatch.com> and Armin Ronacher
+<armin.ronacher@active-4.com>.
+
+Other contributors, listed alphabetically, are:
+
+* Sam Aaron -- Ioke lexer
+* Jean Abou Samra -- LilyPond lexer
+* João Abecasis -- JSLT lexer
+* Ali Afshar -- image formatter
+* Thomas Aglassinger -- Easytrieve, JCL, Rexx, Transact-SQL and VBScript
+  lexers
+* Maxence Ahlouche -- PostgreSQL Explain lexer
+* Muthiah Annamalai -- Ezhil lexer
+* Nikolay Antipov -- OpenSCAD lexer
+* Kumar Appaiah -- Debian control lexer
+* Andreas Amann -- AppleScript lexer
+* Timothy Armstrong -- Dart lexer fixes
+* Jeffrey Arnold -- R/S, Rd, BUGS, Jags, and Stan lexers
+* Eiríkr Åsheim -- Uxntal lexer
+* Jeremy Ashkenas -- CoffeeScript lexer
+* José Joaquín Atria -- Praat lexer
+* Stefan Matthias Aust -- Smalltalk lexer
+* Lucas Bajolet -- Nit lexer
+* Ben Bangert -- Mako lexers
+* Max Battcher -- Darcs patch lexer
+* Thomas Baruchel -- APL lexer
+* Tim Baumann -- (Literate) Agda lexer
+* Paul Baumgart, 280 North, Inc. -- Objective-J lexer
+* Michael Bayer -- Myghty lexers
+* Thomas Beale -- Archetype lexers
+* John Benediktsson -- Factor lexer
+* David Benjamin, Google LLC -- TLS lexer
+* Trevor Bergeron -- mIRC formatter
+* Vincent Bernat -- LessCSS lexer
+* Christopher Bertels -- Fancy lexer
+* Sébastien Bigaret -- QVT Operational lexer
+* Jarrett Billingsley -- MiniD lexer
+* Adam Blinkinsop -- Haskell, Redcode lexers
+* Stéphane Blondon -- Procfile, SGF and Sieve lexers
+* Frits van Bommel -- assembler lexers
+* Pierre Bourdon -- bugfixes
+* Martijn Braam -- Kernel log lexer, BARE lexer
+* JD Browne, Google LLC -- GoogleSQL lexer
+* Matthias Bussonnier -- ANSI style handling for terminal-256 formatter
+* chebee7i -- Python traceback lexer improvements
+* Hiram Chirino -- Scaml and Jade lexers
+* Mauricio Caceres -- SAS and Stata lexers.
+* Michael Camilleri, John Gabriele, sogaiu -- Janet lexer
+* Daren Chandisingh -- Gleam lexer
+* Ian Cooper -- VGL lexer
+* David Corbett -- Inform, Jasmin, JSGF, Snowball, and TADS 3 lexers
+* Leaf Corcoran -- MoonScript lexer
+* Fraser Cormack -- TableGen lexer
+* Gabriel Corona -- ASN.1 lexer
+* Radu Costache -- Boogie and Civl Verifier lexer improvements
+* Christopher Creutzig -- MuPAD lexer
+* Daniël W. Crompton -- Pike lexer
+* Pete Curry -- bugfixes
+* Bryan Davis -- EBNF lexer
+* Bruno Deferrari -- Shen lexer
+* Walter Dörwald -- UL4 lexer
+* Luke Drummond -- Meson lexer
+* Giedrius Dubinskas -- HTML formatter improvements
+* Owen Durni -- Haxe lexer
+* Alexander Dutton, Oxford University Computing Services -- SPARQL lexer
+* James Edwards -- Terraform lexer
+* Nick Efford -- Python 3 lexer
+* Sven Efftinge -- Xtend lexer
+* Artem Egorkine -- terminal256 formatter
+* Matthew Fernandez -- CAmkES lexer
+* Paweł Fertyk -- GDScript lexer, HTML formatter improvements
+* Michael Ficarra -- CPSA lexer
+* James H. Fisher -- PostScript lexer
+* Amanda Fitch, Google LLC -- GoogleSQL lexer
+* William S. Fulton -- SWIG lexer
+* Carlos Galdino -- Elixir and Elixir Console lexers
+* Michael Galloy -- IDL lexer
+* Naveen Garg -- Autohotkey lexer
+* Simon Garnotel -- FreeFem++ lexer
+* Laurent Gautier -- R/S lexer
+* Alex Gaynor -- PyPy log lexer
+* Richard Gerkin -- Igor Pro lexer
+* Alain Gilbert -- TypeScript lexer
+* Alex Gilding -- BlitzBasic lexer
+* GitHub, Inc -- DASM16, Augeas, TOML, and Slash lexers
+* Bertrand Goetzmann -- Groovy lexer
+* Krzysiek Goj -- Scala lexer
+* Rostyslav Golda -- FloScript lexer
+* Andrey Golovizin -- BibTeX lexers
+* Matt Good -- Genshi, Cheetah lexers
+* Michał Górny -- vim modeline support
+* Alex Gosse -- TrafficScript lexer
+* Patrick Gotthardt -- PHP namespaces support
+* Hubert Gruniaux -- C and C++ lexer improvements
+* Olivier Guibe -- Asymptote lexer
+* Armin Günther -- Go lexer improvements
+* Phil Hagelberg -- Fennel lexer
+* Florian Hahn -- Boogie lexer
+* Martin Harriman -- SNOBOL lexer
+* Matthew Harrison -- SVG formatter
+* Steven Hazel -- Tcl lexer
+* Dan Michael Heggø -- Turtle lexer
+* Aslak Hellesøy -- Gherkin lexer
+* Greg Hendershott -- Racket lexer
+* Justin Hendrick -- ParaSail lexer
+* Jordi Gutiérrez Hermoso -- Octave lexer
+* David Hess, Fish Software, Inc. -- Objective-J lexer
+* Ken Hilton -- Typographic Number Theory and Arrow lexers
+* Varun Hiremath -- Debian control lexer
+* Rob Hoelz -- Perl 6 lexer
+* Doug Hogan -- Mscgen lexer
+* Ben Hollis -- Mason lexer
+* Max Horn -- GAP lexer
+* Fred Hornsey -- OMG IDL Lexer
+* Alastair Houghton -- Lexer inheritance facility
+* Tim Howard -- BlitzMax lexer
+* Dustin Howett -- Logos lexer
+* Ivan Inozemtsev -- Fantom lexer
+* Hiroaki Itoh -- Shell console rewrite, Lexers for PowerShell session,
+  MSDOS session, BC, WDiff
+* Brian R. Jackson -- Tea lexer
+* Alex Jeffery, ChromaWay AB -- Rell lexer
+* Christian Jann -- ShellSession lexer
+* Jonas Camillus Jeppesen -- Line numbers and line highlighting for
+  RTF-formatter
+* Dennis Kaarsemaker -- sources.list lexer
+* Dmitri Kabak -- Inferno Limbo lexer
+* Igor Kalnitsky -- vhdl lexer
+* Colin Kennedy - USD lexer
+* Alexander Kit -- MaskJS lexer
+* Pekka Klärck -- Robot Framework lexer
+* Gerwin Klein -- Isabelle lexer
+* Eric Knibbe -- Lasso lexer
+* Stepan Koltsov -- Clay lexer
+* Oliver Kopp - Friendly grayscale style
+* Adam Koprowski -- Opa lexer
+* Benjamin Kowarsch -- Modula-2 lexer
+* Domen Kožar -- Nix lexer
+* Oleh Krekel -- Emacs Lisp lexer
+* Alexander Kriegisch -- Kconfig and AspectJ lexers
+* Marek Kubica -- Scheme lexer
+* Jochen Kupperschmidt -- Markdown processor
+* Gerd Kurzbach -- Modelica lexer
+* Jon Larimer, Google Inc. -- Smali lexer
+* Olov Lassus -- Dart lexer
+* Matt Layman -- TAP lexer
+* Dan Lazin, Google LLC -- GoogleSQL lexer
+* Kristian Lyngstøl -- Varnish lexers
+* Sylvestre Ledru -- Scilab lexer
+* Chee Sing Lee -- Flatline lexer
+* Mark Lee -- Vala lexer
+* Thomas Linder Puls -- Visual Prolog lexer
+* Pete Lomax -- Phix lexer
+* Valentin Lorentz -- C++ lexer improvements
+* Ben Mabey -- Gherkin lexer
+* Angus MacArthur -- QML lexer
+* Louis Mandel -- X10 lexer
+* Louis Marchand -- Eiffel lexer
+* Simone Margaritelli -- Hybris lexer
+* Tim Martin - World of Warcraft TOC lexer
+* Kirk McDonald -- D lexer
+* Gordon McGregor -- SystemVerilog lexer
+* Stephen McKamey -- Duel/JBST lexer
+* Brian McKenna -- F# lexer
+* Charles McLaughlin -- Puppet lexer
+* Kurt McKee -- Tera Term macro lexer, PostgreSQL updates, MySQL overhaul, JSON lexer
+* Joe Eli McIlvain -- Savi lexer
+* Lukas Meuser -- BBCode formatter, Lua lexer
+* Bruno Mesquita -- Night Owl style
+* Cat Miller -- Pig lexer
+* Paul Miller -- LiveScript lexer
+* Hong Minhee -- HTTP lexer
+* Michael Mior -- Awk lexer
+* Bruce Mitchener -- Dylan lexer rewrite
+* Reuben Morais -- SourcePawn lexer
+* Jon Morton -- Rust lexer
+* Paulo Moura -- Logtalk lexer
+* Mher Movsisyan -- DTD lexer
+* Dejan Muhamedagic -- Crmsh lexer
+* Adrien Nayrat -- PostgreSQL Explain lexer
+* Ana Nelson -- Ragel, ANTLR, R console lexers
+* David Neto, Google LLC -- WebGPU Shading Language lexer
+* Kurt Neufeld -- Markdown lexer
+* Nam T. Nguyen -- Monokai style
+* Jesper Noehr -- HTML formatter "anchorlinenos"
+* Mike Nolta -- Julia lexer
+* Avery Nortonsmith -- Pointless lexer
+* Jonas Obrist -- BBCode lexer
+* Edward O'Callaghan -- Cryptol lexer
+* David Oliva -- Rebol lexer
+* Pat Pannuto -- nesC lexer
+* Jon Parise -- Protocol buffers and Thrift lexers
+* Benjamin Peterson -- Test suite refactoring
+* Ronny Pfannschmidt -- BBCode lexer
+* Dominik Picheta -- Nimrod lexer
+* Andrew Pinkham -- RTF Formatter Refactoring
+* Clément Prévost -- UrbiScript lexer
+* Tanner Prynn -- cmdline -x option and loading lexers from files
+* Oleh Prypin -- Crystal lexer (based on Ruby lexer)
+* Nick Psaris -- K and Q lexers
+* Xidorn Quan -- Web IDL lexer
+* Elias Rabel -- Fortran fixed form lexer
+* raichoo -- Idris lexer
+* Daniel Ramirez -- GDScript lexer
+* Kashif Rasul -- CUDA lexer
+* Nathan Reed -- HLSL lexer
+* Justin Reidy -- MXML lexer
+* Jonathon Reinhart, Google LLC -- Soong lexer
+* Norman Richards -- JSON lexer
+* Corey Richardson -- Rust lexer updates
+* Fabrizio Riguzzi -- cplint leder
+* Lubomir Rintel -- GoodData MAQL and CL lexers
+* Andre Roberge -- Tango style
+* Georg Rollinger -- HSAIL lexer
+* Michiel Roos -- TypoScript lexer
+* Konrad Rudolph -- LaTeX formatter enhancements
+* Mario Ruggier -- Evoque lexers
+* Miikka Salminen -- Lovelace style, Hexdump lexer, lexer enhancements
+* Stou Sandalski -- NumPy, FORTRAN, tcsh and XSLT lexers
+* Matteo Sasso -- Common Lisp lexer
+* Joe Schafer -- Ada lexer
+* Max Schillinger -- TiddlyWiki5 lexer
+* Andrew Schmidt -- X++ lexer
+* Ken Schutte -- Matlab lexers
+* René Schwaiger -- Rainbow Dash style
+* Sebastian Schweizer -- Whiley lexer
+* Tassilo Schweyer -- Io, MOOCode lexers
+* Pablo Seminario -- PromQL lexer
+* Ted Shaw -- AutoIt lexer
+* Joerg Sieker -- ABAP lexer
+* Robert Simmons -- Standard ML lexer
+* Kirill Simonov -- YAML lexer
+* Corbin Simpson -- Monte lexer
+* Ville Skyttä -- ASCII armored lexer
+* Alexander Smishlajev -- Visual FoxPro lexer
+* Steve Spigarelli -- XQuery lexer
+* Jerome St-Louis -- eC lexer
+* Camil Staps -- Clean and NuSMV lexers; Solarized style
+* James Strachan -- Kotlin lexer
+* Tom Stuart -- Treetop lexer
+* Colin Sullivan -- SuperCollider lexer
+* Ben Swift -- Extempore lexer
+* tatt61880 -- Kuin lexer
+* Edoardo Tenani -- Arduino lexer
+* Tiberius Teng -- default style overhaul
+* Jeremy Thurgood -- Erlang, Squid config lexers
+* Brian Tiffin -- OpenCOBOL lexer
+* Bob Tolbert -- Hy lexer
+* Doug Torrance -- Macaulay2 lexer
+* Matthias Trute -- Forth lexer
+* Tuoa Spi T4 -- Bdd lexer
+* Erick Tryzelaar -- Felix lexer
+* Alexander Udalov -- Kotlin lexer improvements
+* Thomas Van Doren -- Chapel lexer
+* Dave Van Ee -- Uxntal lexer updates
+* Daniele Varrazzo -- PostgreSQL lexers
+* Abe Voelker -- OpenEdge ABL lexer
+* Pepijn de Vos -- HTML formatter CTags support
+* Matthias Vallentin -- Bro lexer
+* Benoît Vinot -- AMPL lexer
+* Linh Vu Hong -- RSL lexer
+* Taavi Väänänen -- Debian control, PHP lexers
+* Immanuel Washington -- Smithy lexer
+* Nathan Weizenbaum -- Haml and Sass lexers
+* Nathan Whetsell -- Csound lexers
+* Dietmar Winkler -- Modelica lexer
+* Nils Winter -- Smalltalk lexer
+* Trevor Woerner -- BitBake lexer
+* Davy Wybiral -- Clojure lexer
+* Whitney Young -- ObjectiveC lexer
+* Diego Zamboni -- CFengine3 lexer
+* Enrique Zamudio -- Ceylon lexer
+* Alex Zimin -- Nemerle lexer
+* Rob Zimmerman -- Kal lexer
+* Evgenii Zheltonozhskii -- Maple lexer
+* Vincent Zurczak -- Roboconf lexer
+* Hubert Gruniaux -- C and C++ lexer improvements
+* Thomas Symalla -- AMDGPU Lexer
+* 15b3 -- Image Formatter improvements
+* Fabian Neumann -- CDDL lexer
+* Thomas Duboucher -- CDDL lexer
+* Philipp Imhof -- Pango Markup formatter
+* Thomas Voss -- Sed lexer
+* Martin Fischer -- WCAG contrast testing
+* Marc Auberer -- Spice lexer
+* Amr Hesham -- Carbon lexer
+* diskdance -- Wikitext lexer
+* vanillajonathan -- PRQL lexer
+* Nikolay Antipov -- OpenSCAD lexer
+* Markus Meyer, Nextron Systems -- YARA lexer
+* Hannes Römer -- Mojo lexer
+* Jan Frederik Schaefer -- PDDL lexer
+
+Many thanks for all contributions!
+```
 
   - `LICENSE`:
 ```
