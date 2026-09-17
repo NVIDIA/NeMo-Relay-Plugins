@@ -14,12 +14,12 @@ This project is currently not accepting contributions.
 
 ## Plugins
 
-| Plugin | What it does | How Relay loads it | Relay plugin ID |
-| --- | --- | --- | --- |
-| [Switchyard](plugins/switchyard-plugin) | Routes supported model requests through a Switchyard deployment. | Loads a Rust shared library into the Relay process. | `nvidia.switchyard` |
-| [Python gRPC worker example](plugins/example-python-grpc-worker-plugin) | Demonstrates settings, request and event hooks, streaming, state cleanup, and middleware controls in Python. | Creates a Python environment and starts a separate `grpc-v1` worker process. | `examples.python_grpc_worker` |
-| [Rust gRPC worker example](plugins/example-rust-grpc-worker-plugin) | Demonstrates the same worker-plugin lifecycle in Rust, including request, stream, event, and state hooks. | Starts a separate Rust `grpc-v1` worker executable. | `examples.rust_grpc_worker` |
-| [Rust native example](plugins/example-rust-native-plugin) | Demonstrates typed event, tool-call, and LLM-call hooks in a native Rust plugin. | Loads a Rust shared library into the Relay process. | `examples.rust_native_policy` |
+| Plugin | What it does | How Relay loads it | Relay plugin ID | License |
+| --- | --- | --- | --- | --- |
+| [Switchyard](plugins/switchyard-plugin) | Routes supported model requests through a Switchyard deployment. | Loads a Rust shared library into the Relay process. | `nvidia.switchyard` | Apache License 2.0 |
+| [Python gRPC worker example](plugins/example-python-grpc-worker-plugin) | Demonstrates settings, request and event hooks, streaming, state cleanup, and middleware controls in Python. | Creates a Python environment and starts a separate `grpc-v1` worker process. | `examples.python_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-python-grpc-worker-plugin/LICENSE) |
+| [Rust gRPC worker example](plugins/example-rust-grpc-worker-plugin) | Demonstrates the same worker-plugin lifecycle in Rust, including request, stream, event, and state hooks. | Starts a separate Rust `grpc-v1` worker executable. | `examples.rust_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-grpc-worker-plugin/LICENSE) |
+| [Rust native example](plugins/example-rust-native-plugin) | Demonstrates typed event, tool-call, and LLM-call hooks in a native Rust plugin. | Loads a Rust shared library into the Relay process. | `examples.rust_native_policy` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-native-plugin/LICENSE) |
 
 A **worker** is a separate process. A **native plugin** is a library loaded into
 Relay itself. Switchyard supports all five platforms listed below. The Python
