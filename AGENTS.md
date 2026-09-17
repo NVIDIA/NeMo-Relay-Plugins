@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Repository guidance
 
 - Never comment on or respond to GitHub/GitLab PRs, MRs, or issues without explicit approval.

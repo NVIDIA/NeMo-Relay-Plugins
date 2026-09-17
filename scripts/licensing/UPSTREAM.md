@@ -1,4 +1,8 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Source of the license tools
 
 `attributions_lockfile_md.py`, `license_diff.py`, and `about.toml` are based on

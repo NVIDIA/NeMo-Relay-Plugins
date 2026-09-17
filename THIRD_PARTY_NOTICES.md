@@ -1,4 +1,8 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Third-party notices
 
 NVIDIA NeMo Relay Plugins uses the [Apache-2.0 license](LICENSE). Packages from

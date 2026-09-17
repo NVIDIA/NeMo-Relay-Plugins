@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 minimum_pre_commit_version: '4.6.2'
 default_stages: [pre-commit]
@@ -5,6 +6,16 @@ default_stages: [pre-commit]
 exclude: '^SECURITY\.md$'
 
 repos:
+  # SPDX copyright header check
+  - repo: local
+    hooks:
+      - id: copyright-header
+        name: copyright header
+        entry: python3 scripts/lint/check_copyright.py
+        language: system
+        files: '\.(rs|go|py|pyi|toml|yaml|yml|md|mjs|js|ts|h|sh)$|\.gitignore$'
+        exclude: '(/SKILL\.md|index\.js|index\.d\.ts|nemo_relay\.h|node_modules/|target/|\.venv/|pkg/|^\.github/pull_request_template\.md)$'
+
   - repo: local
     hooks:
       - id: trailing-whitespace

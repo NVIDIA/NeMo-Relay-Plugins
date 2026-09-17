@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
 """Standard-library-only build backend copied into a Relay wheel bundle.
 
 The adapter installs the unchanged, checksummed wheels as direct requirements.
