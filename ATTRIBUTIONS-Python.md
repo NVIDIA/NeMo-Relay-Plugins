@@ -10701,7 +10701,7 @@ DEALINGS IN THE SOFTWARE.
 = = = = =
 ```
 
-## nemo-relay (0.9.0rc2)
+## nemo-relay (0.9.0)
 
 ### Licenses
 License: `Apache-2.0`
@@ -11121,12 +11121,12 @@ License: `Apache-2.0`
    limitations under the License.
 ```
 
-## nemo-relay-plugin (0.9.0rc2)
+## nemo-relay-plugin (0.9.0)
 
 ### Licenses
 License: `Apache-2.0`
 
-  - `https://github.com/NVIDIA/NeMo-Relay/blob/ee3c3ff7da31a51fa316603bfa6b9e190f385c53/LICENSE`:
+  - `https://github.com/NVIDIA/NeMo-Relay/blob/f45b602505f69da199af1bfa7f6061b3a1e7d72d/LICENSE`:
 ```
                                  Apache License
                            Version 2.0, January 2004

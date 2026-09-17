@@ -39,6 +39,7 @@ cwd = "source"
 bundle = "bundle"
 manifest = "relay-plugin.toml"
 
-# Use the current published 0.9 release candidate while this plugin is being qualified.
+# Build the 0.9.0 host with the Linux venv attestation fix from NeMo-Relay#1110.
+# Replace this SHA with the first Relay patch release containing that fix.
 [relay]
-tag = "0.9.0-rc.2"
+sha = "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"

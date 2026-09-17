@@ -44,8 +44,8 @@ def test_distribution_names_use_lock_normalization() -> None:
     assert normalized_package_name("Relay_Wheel.Environment") == "relay-wheel-environment"
     assert (
         unexpected_distributions(
-            {"NeMo_Relay.Plugin": "0.9.0rc2"},
-            {("nemo-relay-plugin", "0.9.0rc2")},
+            {"NeMo_Relay.Plugin": "0.9.0"},
+            {("nemo-relay-plugin", "0.9.0")},
         )
         == []
     )

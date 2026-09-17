@@ -7,13 +7,13 @@ provider calls, tool execution, and observability.
 
 ## Status
 
-> **Unreleased. Do not publish the current Relay 0.9.0-rc.2 compatibility
-> build as a production plugin.**
+> **Unreleased. Do not publish this plugin until its full install and smoke
+> matrix passes against a released Relay host.**
 
-Release requires a published Relay host and Python SDK with per-invocation
-codec context, typed policy errors, continuation-aware timeouts, and the tested
-100 MiB worker transport limit. The manifest and both Relay Python dependencies
-must then move to that same version.
+The plugin uses the Relay 0.9 worker contract and pins both Relay Python
+dependencies to 0.9.0. Its Linux install path currently also needs a Relay fix
+for the standard Python `lib64 -> lib` virtual-environment alias. Until that fix
+ships in a Relay patch release, CI uses the reviewed host commit directly.
 
 ## What it supports
 
@@ -269,7 +269,7 @@ nemo-relay plugins validate nemoguardrails.nemo_relay
 | Item | Current value |
 |---|---|
 | NeMo Guardrails | Exactly 0.24.1 |
-| Relay development host | 0.9.0-rc.2; not the production target |
+| Relay API and Python SDK | 0.9.0; CI host temporarily includes [NeMo-Relay#1110](https://github.com/NVIDIA/NeMo-Relay/pull/1110) |
 | Python | 3.11–3.13 |
 | Declared release targets | Linux x86-64/ARM64, Windows x86-64, macOS ARM64 |
 | Plugin ID | `nemoguardrails.nemo_relay` |

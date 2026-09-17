@@ -22,7 +22,7 @@ def test_manifest_matches_worker_and_current_contract() -> None:
     digest = f"sha256:{hashlib.sha256(artifact.read_bytes()).hexdigest()}"
 
     assert manifest["plugin"] == {"id": configuration.PLUGIN_ID, "kind": "worker"}
-    assert manifest["compat"] == {"relay": "=0.9.0-rc.2", "worker_protocol": "grpc-v1"}
+    assert manifest["compat"] == {"relay": ">=0.9.0,<1.0", "worker_protocol": "grpc-v1"}
     assert manifest["integrity"]["sha256"] == digest
 
 
@@ -92,14 +92,12 @@ def test_project_dependency_bounds_match_the_design() -> None:
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     release = tomllib.loads((PROJECT_ROOT / "release.toml").read_text(encoding="utf-8"))
     manifest = tomllib.loads((PROJECT_ROOT / "relay-plugin.toml").read_text(encoding="utf-8"))
-    relay_tag = release["relay"]["tag"]
-    relay_python_version = relay_tag.replace("-rc.", "rc")
-
     assert project["requires-python"] == ">=3.11,<3.14"
     assert release["version"] == project["version"]
-    assert manifest["compat"]["relay"] == f"={relay_tag}"
-    assert f"nemo-relay=={relay_python_version}" in project["dependencies"]
-    assert f"nemo-relay-plugin=={relay_python_version}" in project["dependencies"]
+    assert release["relay"]["sha"] == "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"
+    assert manifest["compat"]["relay"] == ">=0.9.0,<1.0"
+    assert "nemo-relay==0.9.0" in project["dependencies"]
+    assert "nemo-relay-plugin==0.9.0" in project["dependencies"]
     assert "nemoguardrails==0.24.1" in project["dependencies"]
     assert "onnxruntime==1.23.2" in project["dependencies"]
 
@@ -109,8 +107,8 @@ def test_base_runtime_is_pinned_without_optional_profiles() -> None:
     dependencies = set(project["project"]["dependencies"])
 
     assert "httpx==0.28.1" in dependencies
-    assert "nemo-relay==0.9.0rc2" in dependencies
-    assert "nemo-relay-plugin==0.9.0rc2" in dependencies
+    assert "nemo-relay==0.9.0" in dependencies
+    assert "nemo-relay-plugin==0.9.0" in dependencies
     assert "nemoguardrails==0.24.1" in dependencies
     assert not any(
         name in requirement
@@ -265,12 +263,12 @@ def test_profile_export_contains_expected_runtime(profile: str, package: str) ->
     assert f"{package}==" in _export(profile)
 
 
-def test_release_and_runtime_manifests_target_same_relay_candidate() -> None:
+def test_release_host_and_runtime_contract_target_relay_09() -> None:
     release = tomllib.loads((PROJECT_ROOT / "release.toml").read_text(encoding="utf-8"))
     runtime = tomllib.loads((PROJECT_ROOT / "relay-plugin.toml").read_text(encoding="utf-8"))
 
-    assert release["relay"]["tag"] == "0.9.0-rc.2"
-    assert runtime["compat"]["relay"] == "=0.9.0-rc.2"
+    assert release["relay"]["sha"] == "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"
+    assert runtime["compat"]["relay"] == ">=0.9.0,<1.0"
 
 
 def test_build_backend_is_hash_constrained() -> None:

@@ -8,7 +8,7 @@ id = "nemoguardrails.nemo_relay"
 kind = "worker"
 
 [compat]
-relay = "=0.9.0-rc.2"
+relay = ">=0.9.0,<1.0"
 worker_protocol = "grpc-v1"
 
 [defaults]

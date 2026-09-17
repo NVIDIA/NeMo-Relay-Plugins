@@ -16,8 +16,8 @@ license-files = ["LICENSE*"]
 dependencies = [
   # check_backend.py uses the async client for the opt-in remote /v1/checks lane.
   "httpx==0.28.1",
-  "nemo-relay==0.9.0rc2",
-  "nemo-relay-plugin==0.9.0rc2",
+  "nemo-relay==0.9.0",
+  "nemo-relay-plugin==0.9.0",
   "nemoguardrails==0.24.1",
   # Guardrails currently permits newer ONNX Runtime releases whose macOS
   # wheels require macOS 14. Keep the plugin on the oldest tested release
@@ -83,9 +83,8 @@ where = ["."]
 include = ["nemoguardrails_nemo_relay*"]
 
 [tool.uv]
-# Relay is explicitly pinned to a release candidate. Guardrails AI's stable
-# OpenTelemetry stack also requires its matching beta semantic-conventions
-# package, so admit pre-releases only when the dependency graph requires one.
+# Guardrails AI's stable OpenTelemetry stack requires its matching beta
+# semantic-conventions package, so admit pre-releases only when required.
 prerelease = "if-necessary"
 # Guardrails AI 0.11 requires LangChain Core 1.x, while the provider-native
 # The Anthropic adapter covered by NeMo Guardrails 0.24 is on LangChain Core

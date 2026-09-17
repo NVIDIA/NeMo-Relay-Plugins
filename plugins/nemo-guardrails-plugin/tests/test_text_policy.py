@@ -238,6 +238,7 @@ async def test_queue_wait_timeout_is_bounded_and_recovers() -> None:
     assert result == "NeMo Guardrails input check timed out"
     assert rails.calls == []
     assert policy._pending == 0
+    policy._timeout_seconds = 1
     assert await policy.check(_request([{"role": "user", "content": "after timeout"}])) is None
 
 

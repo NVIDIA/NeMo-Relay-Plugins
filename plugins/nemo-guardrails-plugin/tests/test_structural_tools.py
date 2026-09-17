@@ -17,6 +17,7 @@ from nemoguardrails_nemo_relay.structural_tools import (
     ToolDefinition,
     ToolExchange,
     ToolResult,
+    ToolVerdict,
     ToolVerdictKind,
 )
 
@@ -610,14 +611,22 @@ async def test_timeout_keeps_capacity_owned_until_the_validator_thread_returns()
     assert adapter._pending == 0
 
 
-async def test_call_candidates_share_one_request_deadline() -> None:
+async def test_call_candidates_share_one_request_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = _adapter(timeout_ms=50)
+    calls = 0
+    second_started = asyncio.Event()
+    never_finishes = asyncio.Event()
 
-    async def slow_allow(*_args: object) -> SimpleNamespace:
-        await asyncio.sleep(0.04)
-        return _rail_result(is_safe=True)
+    async def check_calls(*_args: object) -> ToolVerdict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return ToolVerdict(ToolVerdictKind.PASSED)
+        second_started.set()
+        await never_finishes.wait()
+        raise AssertionError("the outer request deadline did not cancel the second candidate")
 
-    adapter._call_check = slow_allow
+    monkeypatch.setattr(adapter, "check_calls", check_calls)
     started = time.perf_counter()
 
     verdict = await adapter.check_call_candidates(
@@ -627,12 +636,9 @@ async def test_call_candidates_share_one_request_deadline() -> None:
     elapsed = time.perf_counter() - started
 
     assert verdict.kind is ToolVerdictKind.VALIDATOR_FAILURE
-    assert elapsed < 0.09
-    for _ in range(100):
-        if adapter._pending == 0:
-            break
-        await asyncio.sleep(0.01)
-    assert adapter._pending == 0
+    assert calls == 2
+    assert second_started.is_set()
+    assert elapsed < 1
 
 
 async def test_result_timeout_is_one_budget_for_the_whole_request() -> None:

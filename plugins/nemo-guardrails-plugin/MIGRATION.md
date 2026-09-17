@@ -6,9 +6,8 @@ Relay's dynamic worker replaces the supported subset of the deprecated
 or remote configuration during the Relay 0.9 removal window.
 
 The worker is not a drop-in replacement. Review the unsupported behavior below
-before removing the built-in component. The current Relay 0.9.0-rc.2 bundle is
-for compatibility testing only; see the [README](README.md#status) for the
-release requirement.
+before removing the built-in component. The worker is still unreleased; see the
+[README](README.md#status) for the remaining host release requirement.
 
 ## Before you migrate
 

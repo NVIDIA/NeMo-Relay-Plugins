@@ -41,3 +41,7 @@ cwd = "source"
 [artifacts]
 bundle = "bundle"
 manifest = "relay-plugin.toml"
+
+# The pinned Switchyard source declares Relay >=0.8.1,<0.9.0.
+[relay]
+tag = "0.8.4"
