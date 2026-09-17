@@ -74,7 +74,7 @@ def test_rust_format_uses_each_in_tree_toolchain(monkeypatch, tmp_path):
 
 
 def test_remote_sources_are_not_formatted_or_updated(catalog):
-    assert len(list(checks.in_tree_sources(catalog))) == 3
+    assert len(list(checks.in_tree_sources(catalog))) == 4
     assert all(
         manifest["source"]["location"] == "in-tree"
         for _, manifest in checks.in_tree_sources(catalog)
@@ -102,7 +102,7 @@ def test_cargo_lockfile_check_resolves_dependencies(monkeypatch, tmp_path):
 
 
 def test_hook_config_change_selects_all_plugins(catalog):
-    assert len(select(discover(catalog), [".pre-commit-config.yaml"])) == 4
+    assert len(select(discover(catalog), [".pre-commit-config.yaml"])) == 5
 
 
 def test_attribution_hook_runs_even_when_commit_only_deletes_files():

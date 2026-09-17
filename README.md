@@ -5,7 +5,7 @@ This repository contains plugins for [NVIDIA NeMo Relay](https://github.com/NVID
 
 This project is currently not accepting contributions.
 
-The supported platforms are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not supported. The Python worker does not support Windows ARM64 because its gRPC package has no supported wheel (a prebuilt Python package) for that platform. Automated checks run for every supported plugin and platform pair: 19 jobs for a full build.
+The supported platforms are `linux-x86_64`, `linux-arm64`, `windows-x86_64`, `windows-arm64`, and `macos-arm64`. macOS x86_64 is not supported. The Python worker does not support Windows ARM64 because its gRPC package has no supported wheel (a prebuilt Python package) for that platform. Automated checks run for every supported plugin and platform pair: 23 jobs for a full build.
 
 A **worker** runs as a separate process. A **native plugin** loads a library into the Relay process. **In-tree** source code lives in this repository. **Remote** source code lives in another repository.
 
@@ -18,6 +18,12 @@ Plugins can also use published Python wheels or Rust crates. See
 | Plugin | Type | Source | Supported platforms |
 | --- | --- | --- | --- |
 | [switchyard-plugin](plugins/switchyard-plugin) | Native | Remote Switchyard workspace | All five |
+
+## Unreleased integrations
+
+| Plugin | Type | Source | Supported platforms |
+| --- | --- | --- | --- |
+| [nemo-guardrails-plugin](plugins/nemo-guardrails-plugin) | Worker | In-tree Python | Linux x86_64/ARM64, Windows x86_64, macOS ARM64 |
 
 ## Example plugins
 
