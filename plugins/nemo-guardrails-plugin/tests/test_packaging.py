@@ -97,7 +97,6 @@ def test_project_dependency_bounds_match_the_design() -> None:
     assert "nemo-relay==0.9.0" in project["dependencies"]
     assert "nemo-relay-plugin==0.9.0" in project["dependencies"]
     assert "nemoguardrails==0.24.1" in project["dependencies"]
-    assert "onnxruntime==1.23.2" in project["dependencies"]
 
 
 def test_base_runtime_is_pinned_without_optional_profiles() -> None:

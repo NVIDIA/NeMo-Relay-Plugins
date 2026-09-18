@@ -19,10 +19,6 @@ dependencies = [
   "nemo-relay==0.9.0",
   "nemo-relay-plugin==0.9.0",
   "nemoguardrails==0.24.1",
-  # Guardrails requires ONNX Runtime. Releases 1.24.1 through 1.30.0 omit the
-  # license text from their wheels, so this repository cannot generate the
-  # required attribution from them. Revisit when upstream restores it.
-  "onnxruntime==1.23.2",
 ]
 
 [dependency-groups]

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-
-# SPDX-License-Identifier: Apache-2.0
 """Verify the installed Guardrails worker against a local provider."""
 
 import os
