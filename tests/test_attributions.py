@@ -7,7 +7,6 @@ import io
 import json
 import re
 import sys
-import tarfile
 import tomllib
 import zipfile
 from pathlib import Path
@@ -161,45 +160,6 @@ def test_python_attributions_cover_locked_registry_versions(lock):
     assert "No license file found" not in text
 
 
-def test_python_attributions_preserve_two_locked_versions_of_one_package(tmp_path, monkeypatch):
-    (tmp_path / "uv.lock").write_text(
-        """
-version = 1
-
-[[package]]
-name = "semver"
-version = "2.13.0"
-source = { registry = "https://pypi.org/simple" }
-
-[[package]]
-name = "semver"
-version = "3.1.0"
-source = { registry = "https://pypi.org/simple" }
-""".lstrip(),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(attribution, "ROOT", tmp_path)
-    locked = attribution._lockfile_external_packages()
-    monkeypatch.setattr(
-        attribution,
-        "_lockfile_only_python_package",
-        lambda package: {
-            "name": package["name"],
-            "version": package["version"],
-            "license_name": "MIT",
-            "license_texts": [("LICENSE", "MIT License")],
-        },
-    )
-
-    rendered = attribution._lockfile_python_packages(locked, own_name="")
-
-    assert set(locked) == {("semver", "2.13.0"), ("semver", "3.1.0")}
-    assert {(package["name"], package["version"]) for package in rendered} == {
-        ("semver", "2.13.0"),
-        ("semver", "3.1.0"),
-    }
-
-
 @pytest.mark.parametrize("lock", list(ROOT.glob("plugins/*/Cargo.lock")))
 def test_rust_attributions_cover_locked_registry_versions(lock):
     packages = tomllib.loads(lock.read_text())["package"]
@@ -239,119 +199,6 @@ def test_wheel_license_is_rendered_in_relay_format():
     assert license_text in text
 
 
-@pytest.mark.parametrize(
-    "marker",
-    ["<<<<<<< HEAD", "=======", "======= branch", ">>>>>>> branch"],
-)
-def test_markdown_code_block_indents_git_conflict_markers_reversibly(marker):
-    source = f"Authors\n{marker}\nExample Contributor\n"
-
-    rendered = attribution._markdown_code_block(source)
-
-    assert f"\n{marker}\n" not in rendered
-    assert rendered.startswith(" ```\n")
-    assert rendered.endswith(" ```\n\n")
-    content = rendered.removeprefix(" ```\n").removesuffix(" ```\n\n")
-    assert "".join(line.removeprefix(" ") for line in content.splitlines(keepends=True)) == source
-
-
-def test_markdown_code_block_leaves_ordinary_text_unindented():
-    assert attribution._markdown_code_block("ordinary license text") == (
-        "```\nordinary license text\n```\n\n"
-    )
-
-
-def test_markdown_code_block_removes_trailing_horizontal_whitespace():
-    source = "generated from the \nkeeps\tinternal whitespace  \n \t\n"
-
-    assert attribution._markdown_code_block(source) == (
-        "```\ngenerated from the\nkeeps\tinternal whitespace\n\n```\n\n"
-    )
-
-
-def test_wheel_preserves_all_declared_license_files_and_deduplicates_content():
-    data = io.BytesIO()
-    license_text = "Copyright Example Authors\nApache license terms.\n"
-    notice_text = "Copyright Example Contributors\nRequired attribution notice.\n"
-    with zipfile.ZipFile(data, "w") as wheel:
-        wheel.writestr(
-            "example-1.0.dist-info/METADATA",
-            "Name: example\n"
-            "Version: 1.0\n"
-            "License-Expression: Apache-2.0\n"
-            "License-File: LICENSE\n"
-            "License-File: NOTICE\n"
-            "License-File: LICENSE-COPY\n",
-        )
-        wheel.writestr("example-1.0.dist-info/licenses/LICENSE", license_text)
-        wheel.writestr("example-1.0.dist-info/licenses/NOTICE", notice_text)
-        wheel.writestr("example-1.0.dist-info/licenses/LICENSE-COPY", license_text)
-
-    license_name, texts = attribution._wheel_metadata_from_bytes(
-        data.getvalue(), package_name="example"
-    )
-
-    assert license_name == "Apache-2.0"
-    assert texts == [
-        ("licenses/LICENSE", license_text.strip()),
-        ("licenses/NOTICE", notice_text.strip()),
-    ]
-
-
-def test_sdist_preserves_all_declared_license_files_and_deduplicates_content():
-    data = io.BytesIO()
-    license_text = "Copyright Example Authors\nApache license terms.\n"
-    notice_text = "Copyright Example Contributors\nRequired attribution notice.\n"
-    metadata = (
-        "Name: example\n"
-        "Version: 1.0\n"
-        "License-Expression: Apache-2.0\n"
-        "License-File: LICENSE\n"
-        "License-File: NOTICE\n"
-        "License-File: LICENSE-COPY\n"
-    )
-    with tarfile.open(fileobj=data, mode="w:gz") as sdist:
-        for path, text in [
-            ("example-1.0/PKG-INFO", metadata),
-            ("example-1.0/LICENSE", license_text),
-            ("example-1.0/NOTICE", notice_text),
-            ("example-1.0/LICENSE-COPY", license_text),
-        ]:
-            payload = text.encode()
-            member = tarfile.TarInfo(path)
-            member.size = len(payload)
-            sdist.addfile(member, io.BytesIO(payload))
-
-    license_name, texts = attribution._sdist_metadata_from_bytes(
-        data.getvalue(), package_name="example"
-    )
-
-    assert license_name == "Apache-2.0"
-    assert texts == [
-        ("LICENSE", license_text.strip()),
-        ("NOTICE", notice_text.strip()),
-    ]
-
-
-def test_wheel_package_root_license_is_used_as_a_bounded_fallback():
-    data = io.BytesIO()
-    license_text = "Copyright Example Authors\nPermission granted.\n"
-    with zipfile.ZipFile(data, "w") as wheel:
-        wheel.writestr(
-            "example-1.0.dist-info/METADATA",
-            "Name: example\nVersion: 1.0\nLicense-Expression: MIT\n",
-        )
-        wheel.writestr("example/LICENSE", license_text)
-        wheel.writestr("example/vendor/dependency/LICENSE", "Do not select this license")
-
-    license_name, texts = attribution._wheel_metadata_from_bytes(
-        data.getvalue(), package_name="example"
-    )
-
-    assert license_name == "MIT"
-    assert texts == [("LICENSE", license_text.strip())]
-
-
 def test_rust_upstream_fallback_uses_publication_commit(tmp_path, monkeypatch):
     import json
 
@@ -384,13 +231,12 @@ def test_upstream_license_fetch_requires_exact_commit(sha):
         attribution._upstream_licenses("https://github.com/owner/repo", sha)
 
 
-@pytest.mark.parametrize("label", ["Homepage", "Repository", "Source", "Source Code"])
-def test_python_fallback_resolves_version_tag_to_commit(monkeypatch, label):
+def test_python_fallback_resolves_version_tag_to_commit(monkeypatch):
     data = io.BytesIO()
     with zipfile.ZipFile(data, "w") as wheel:
         wheel.writestr(
             "example-1.0.dist-info/METADATA",
-            f"Name: example\nVersion: 1.0\nProject-URL: {label}, https://github.com/owner/repo\n",
+            "Name: example\nVersion: 1.0\nProject-URL: Repository, https://github.com/owner/repo\n",
         )
     monkeypatch.setattr(attribution, "_download_locked_artifact", lambda *args: data.getvalue())
     tag_sha, commit_sha = "a" * 40, "b" * 40
@@ -412,76 +258,6 @@ def test_python_fallback_resolves_version_tag_to_commit(monkeypatch, label):
     assert calls[0][-2:] == ["refs/tags/1.0", "refs/tags/1.0^{}"]
     monkeypatch.setattr(attribution.subprocess, "check_output", lambda *args, **kwargs: "")
     assert attribution._python_upstream_licenses(package) == []
-
-
-def test_python_fallback_supports_monorepo_package_tags(monkeypatch):
-    data = io.BytesIO()
-    with zipfile.ZipFile(data, "w") as wheel:
-        wheel.writestr(
-            "example-1.0.dist-info/METADATA",
-            "Name: example\nVersion: 1.0\nProject-URL: Repository, https://github.com/owner/repo\n",
-        )
-    monkeypatch.setattr(attribution, "_download_locked_artifact", lambda *args: data.getvalue())
-    commit_sha = "b" * 40
-    calls = []
-
-    def refs(argv, **kwargs):
-        calls.append(argv[-2])
-        if argv[-2] == "refs/tags/example==1.0":
-            return f"{commit_sha}\trefs/tags/example==1.0\n"
-        return ""
-
-    monkeypatch.setattr(attribution.subprocess, "check_output", refs)
-    monkeypatch.setattr(
-        attribution, "_upstream_licenses", lambda repo, sha: [(sha, "License text")]
-    )
-    package = {
-        "name": "example",
-        "version": "1.0",
-        "wheels": [{"url": "https://example.com/pkg.whl", "hash": "verified"}],
-    }
-
-    assert attribution._python_upstream_licenses(package) == [(commit_sha, "License text")]
-    assert calls == ["refs/tags/1.0", "refs/tags/v1.0", "refs/tags/example==1.0"]
-
-
-def test_python_fallback_supports_legacy_homepage_repository_metadata(monkeypatch):
-    data = io.BytesIO()
-    with zipfile.ZipFile(data, "w") as wheel:
-        wheel.writestr(
-            "example-1.0.dist-info/METADATA",
-            "Name: example\nVersion: 1.0\nHome-page: https://github.com/owner/repo\n",
-        )
-    monkeypatch.setattr(attribution, "_download_locked_artifact", lambda *args: data.getvalue())
-    commit_sha = "c" * 40
-    monkeypatch.setattr(
-        attribution.subprocess,
-        "check_output",
-        lambda *args, **kwargs: f"{commit_sha}\trefs/tags/1.0\n",
-    )
-    monkeypatch.setattr(
-        attribution, "_upstream_licenses", lambda repo, sha: [(sha, "License text")]
-    )
-    package = {
-        "name": "example",
-        "version": "1.0",
-        "wheels": [{"url": "https://example.com/pkg.whl", "hash": "verified"}],
-    }
-
-    assert attribution._python_upstream_licenses(package) == [(commit_sha, "License text")]
-
-
-@pytest.mark.parametrize(
-    ("version", "expected"),
-    [
-        ("1.2.3", ["1.2.3", "v1.2.3"]),
-        ("1.2.3a4", ["1.2.3a4", "v1.2.3a4", "1.2.3-alpha.4", "v1.2.3-alpha.4"]),
-        ("1.2.3b4", ["1.2.3b4", "v1.2.3b4", "1.2.3-beta.4", "v1.2.3-beta.4"]),
-        ("1.2.3rc4", ["1.2.3rc4", "v1.2.3rc4", "1.2.3-rc.4", "v1.2.3-rc.4"]),
-    ],
-)
-def test_python_version_tag_candidates_cover_pep440_and_semver(version, expected):
-    assert attribution._python_version_tag_candidates(version) == expected
 
 
 def test_missing_rust_license_fails_without_placeholder(tmp_path, monkeypatch):

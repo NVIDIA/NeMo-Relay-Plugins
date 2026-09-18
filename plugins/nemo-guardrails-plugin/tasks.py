@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # SPDX-License-Identifier: Apache-2.0
 """Build, test, and package the NeMo Guardrails worker."""
 
@@ -10,7 +13,6 @@ import tomllib
 sys.path.insert(0, os.environ["REPO_DIR"])
 from scripts.tasks import (
     Context,
-    package_locked_python_project,
     run,
     write_attributions,
     write_runtime_manifest,
@@ -80,6 +82,7 @@ def package(ctx: Context) -> None:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     for filename in [
+        "pyproject.toml",
         "uv.lock",
         "config.schema.json",
         "LICENSE",
@@ -94,10 +97,6 @@ def package(ctx: Context) -> None:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
-    wheels = list((ctx.output / "python-dist").glob("*.whl"))
-    if len(wheels) != 1:
-        raise ValueError("build must produce exactly one project wheel")
-    package_locked_python_project(ctx, wheels[0], manifest)
     write_runtime_manifest(ctx.bundle, manifest)
     write_attributions(ctx)
 

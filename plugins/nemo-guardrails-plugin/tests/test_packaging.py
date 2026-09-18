@@ -9,8 +9,6 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-import pytest
-
 from nemoguardrails_nemo_relay import configuration
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +104,7 @@ def test_base_runtime_is_pinned_without_optional_profiles() -> None:
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = set(project["project"]["dependencies"])
 
+    assert "optional-dependencies" not in project["project"]
     assert "httpx==0.28.1" in dependencies
     assert "nemo-relay==0.9.0" in dependencies
     assert "nemo-relay-plugin==0.9.0" in dependencies
@@ -128,86 +127,7 @@ def test_base_runtime_is_pinned_without_optional_profiles() -> None:
     )
 
 
-def test_optional_profiles_are_explicit_and_hardware_neutral() -> None:
-    project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    profiles = project["project"]["optional-dependencies"]
-
-    assert set(profiles) == {
-        "cleanlab",
-        "gcp-moderation",
-        "guardrails-ai",
-        "hf-classifier",
-        "langchain-anthropic",
-        "presidio",
-        "yara",
-    }
-    assert profiles["cleanlab"] == ["cleanlab-studio==2.5.21"]
-    assert profiles["gcp-moderation"] == ["nemoguardrails[gcp]==0.24.1"]
-    assert profiles["guardrails-ai"] == [
-        "guardrails-ai==0.11.0",
-        "guardrails-ai-regex-match==0.1.0",
-    ]
-    assert profiles["presidio"] == ["nemoguardrails[sdd]==0.24.1"]
-    assert profiles["yara"] == ["nemoguardrails[jailbreak]==0.24.1"]
-    assert not any(requirement.startswith("torch") for requirement in profiles["hf-classifier"])
-    assert project["tool"]["uv"]["conflicts"] == [
-        [
-            {"extra": "guardrails-ai"},
-            {"extra": "langchain-anthropic"},
-        ],
-        [
-            {"extra": "cleanlab"},
-            {"extra": "guardrails-ai"},
-        ],
-    ]
-
-
-def test_optional_profiles_resolve_expected_guardrails_families() -> None:
-    lock = tomllib.loads((PROJECT_ROOT / "uv.lock").read_text(encoding="utf-8"))
-    root = next(package for package in lock["package"] if package["name"] == "nemoguardrails-nemo-relay")
-    profiles = root["optional-dependencies"]
-    locked_names = {package["name"] for package in lock["package"]}
-
-    assert lock["conflicts"] == [
-        [
-            {"package": "nemoguardrails-nemo-relay", "extra": "guardrails-ai"},
-            {"package": "nemoguardrails-nemo-relay", "extra": "langchain-anthropic"},
-        ],
-        [
-            {"package": "nemoguardrails-nemo-relay", "extra": "cleanlab"},
-            {"package": "nemoguardrails-nemo-relay", "extra": "guardrails-ai"},
-        ],
-    ]
-
-    assert profiles["cleanlab"] == [{"name": "cleanlab-studio"}]
-    assert profiles["gcp-moderation"] == [{"name": "nemoguardrails", "extra": ["gcp"]}]
-    assert profiles["guardrails-ai"] == [
-        {"name": "guardrails-ai"},
-        {"name": "guardrails-ai-regex-match"},
-    ]
-    assert profiles["presidio"] == [{"name": "nemoguardrails", "extra": ["sdd"]}]
-    assert profiles["yara"] == [{"name": "nemoguardrails", "extra": ["jailbreak"]}]
-    assert profiles["hf-classifier"] == [{"name": "transformers"}]
-    assert {dependency["name"] for dependency in profiles["langchain-anthropic"]} == {
-        "langchain",
-        "langchain-anthropic",
-        "langchain-community",
-        "langchain-core",
-    }
-    assert {
-        "cleanlab-studio",
-        "google-cloud-language",
-        "guardrails-ai",
-        "guardrails-ai-regex-match",
-        "langchain-anthropic",
-        "presidio-analyzer",
-        "presidio-anonymizer",
-        "transformers",
-        "yara-python",
-    } <= locked_names
-
-
-def _export(extra: str | None = None) -> str:
+def _export() -> str:
     command = [
         "uv",
         "export",
@@ -222,15 +142,17 @@ def _export(extra: str | None = None) -> str:
         "--no-annotate",
         "--no-hashes",
     ]
-    if extra is not None:
-        command.extend(["--extra", extra])
     return subprocess.check_output(command, text=True)
 
 
-def test_base_export_excludes_every_optional_profile() -> None:
+def test_runtime_lock_excludes_unsupported_optional_integrations() -> None:
     exported = _export()
+    lock = tomllib.loads((PROJECT_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    root = next(package for package in lock["package"] if package["name"] == "nemoguardrails-nemo-relay")
+    locked_names = {package["name"] for package in lock["package"]}
 
-    for package in [
+    assert "optional-dependencies" not in root
+    for package in {
         "cleanlab-studio",
         "fast-langdetect",
         "google-cloud-language",
@@ -242,25 +164,9 @@ def test_base_export_excludes_every_optional_profile() -> None:
         "torch",
         "transformers",
         "yara-python",
-    ]:
+    }:
         assert f"{package}==" not in exported
-
-
-@pytest.mark.parametrize(
-    ("profile", "package"),
-    [
-        ("cleanlab", "cleanlab-studio"),
-        ("gcp-moderation", "google-cloud-language"),
-        ("guardrails-ai", "guardrails-ai"),
-        ("guardrails-ai", "guardrails-ai-regex-match"),
-        ("hf-classifier", "transformers"),
-        ("langchain-anthropic", "langchain-anthropic"),
-        ("presidio", "presidio-analyzer"),
-        ("yara", "yara-python"),
-    ],
-)
-def test_profile_export_contains_expected_runtime(profile: str, package: str) -> None:
-    assert f"{package}==" in _export(profile)
+        assert package not in locked_names
 
 
 def test_release_host_and_runtime_contract_target_relay_09() -> None:

@@ -181,7 +181,7 @@
       "default": {}
     },
     "evaluator_framework": {
-      "description": "Model-provider adapter used by local LLM-backed rails. default supports OpenAI-compatible evaluators, including NVIDIA NIM. langchain is qualified only for native Anthropic evaluators and requires the langchain-anthropic optional plugin profile.",
+      "description": "Model-provider adapter used by local LLM-backed rails. default supports OpenAI-compatible evaluators, including NVIDIA NIM. langchain is accepted only for native Anthropic evaluators and requires compatible LangChain packages supplied by a custom build; those packages are not included in the standard archive.",
       "type": "string",
       "enum": ["default", "langchain"],
       "default": "default"

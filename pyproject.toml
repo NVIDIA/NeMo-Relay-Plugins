@@ -5,7 +5,7 @@
 name = "nemo-relay-plugin-release-tools"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["jsonschema==4.26.0", "packaging==26.3", "tomli-w==1.2.0"]
+dependencies = ["jsonschema==4.26.0", "tomli-w==1.2.0"]
 
 [dependency-groups]
 test = [

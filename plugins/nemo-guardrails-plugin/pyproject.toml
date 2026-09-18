@@ -19,42 +19,10 @@ dependencies = [
   "nemo-relay==0.9.0",
   "nemo-relay-plugin==0.9.0",
   "nemoguardrails==0.24.1",
-  # Guardrails currently permits newer ONNX Runtime releases whose macOS
-  # wheels require macOS 14. Keep the plugin on the oldest tested release
-  # that supports every platform declared in release.toml.
+  # Guardrails requires ONNX Runtime. Releases 1.24.1 through 1.30.0 omit the
+  # license text from their wheels, so this repository cannot generate the
+  # required attribution from them. Revisit when upstream restores it.
   "onnxruntime==1.23.2",
-]
-
-[project.optional-dependencies]
-# These profiles are intentionally excluded from the base Relay bundle. They
-# let custom distributions opt into one Guardrails integration at a time
-# without adding large or platform-specific packages to every installation.
-cleanlab = ["cleanlab-studio==2.5.21"]
-gcp-moderation = ["nemoguardrails[gcp]==0.24.1"]
-guardrails-ai = [
-  # Guardrails AI installs its validators as separate distributions. Keep one
-  # small, deterministic validator in this contract-tested profile instead of
-  # advertising an empty client runtime as validator support.
-  "guardrails-ai==0.11.0",
-  "guardrails-ai-regex-match==0.1.0",
-]
-presidio = ["nemoguardrails[sdd]==0.24.1"]
-yara = ["nemoguardrails[jailbreak]==0.24.1"]
-hf-classifier = [
-  # This is dependency assistance for Guardrails' local backend, not a
-  # self-contained runtime. Keep Torch operator-selected: PyPI's Linux package
-  # pulls a CUDA stack into the cross-platform lock even for CPU deployments.
-  "transformers>=4.35,<5",
-]
-langchain-anthropic = [
-  # Stay on the mutually compatible pre-1.0 provider family covered by the
-  # Guardrails contract tests instead of resolving unrelated future APIs.
-  "langchain>=0.3.27,<1",
-  "langchain-anthropic>=0.3.22,<1",
-  # 0.3.22 is the newest 0.3 community release with an immutable upstream
-  # monorepo tag, which keeps source/license provenance auditable.
-  "langchain-community==0.3.22",
-  "langchain-core>=0.3.80,<1",
 ]
 
 [dependency-groups]
@@ -78,26 +46,12 @@ select = ["E", "F", "I", "W"]
 [tool.ruff.lint.isort]
 known-first-party = ["nemoguardrails_nemo_relay"]
 
+[tool.uv]
+# FastEmbed accepts Loguru 0.7.2 or newer, but the 0.7.3 wheel omits its
+# license file and license metadata. Keep the newest distributable release
+# that satisfies this repository's attribution checks.
+constraint-dependencies = ["loguru==0.7.2"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["nemoguardrails_nemo_relay*"]
-
-[tool.uv]
-# Guardrails AI's stable OpenTelemetry stack requires its matching beta
-# semantic-conventions package, so admit pre-releases only when required.
-prerelease = "if-necessary"
-# Guardrails AI 0.11 requires LangChain Core 1.x, while the provider-native
-# The Anthropic adapter covered by NeMo Guardrails 0.24 is on LangChain Core
-# 0.3.x. They are separate worker build profiles and cannot share one Python
-# environment.
-conflicts = [
-  [
-    { extra = "guardrails-ai" },
-    { extra = "langchain-anthropic" },
-  ],
-  [
-    # Cleanlab Studio requires semver 2.x; Guardrails AI requires 3.x.
-    { extra = "cleanlab" },
-    { extra = "guardrails-ai" },
-  ],
-]

@@ -16,83 +16,11 @@ from pathlib import Path
 
 import pytest
 import tomli_w
-from packaging.markers import default_environment
-from packaging.requirements import Requirement
-from packaging.tags import Tag
 
 from scripts import package_sources as sources, plugins
 from scripts.bundles import sha256, verify_bundle, create_archive, extract_archive
 from scripts.licensing import generate
 from scripts.tasks import Context, package_wheel
-
-
-def test_locked_runtime_export_selects_exact_base_requirements():
-    environment = default_environment()
-    environment["python_full_version"] = "3.11.9"
-    requirements = sources.parse_locked_runtime_requirements(
-        "base==1.0\nold==2.0 ; python_full_version < '3.12'\n"
-        "new==3.0 ; python_full_version >= '3.12'\n",
-        environment=environment,
-    )
-    assert [(requirement.name, str(requirement.specifier)) for requirement in requirements] == [
-        ("base", "==1.0"),
-        ("old", "==2.0"),
-    ]
-    for invalid in ["range>=1", "profile[extra]==1", "direct @ https://example.com/a.whl"]:
-        with pytest.raises(ValueError, match="locked runtime"):
-            sources.parse_locked_runtime_requirements(invalid, environment=environment)
-
-
-def test_declared_python_drives_markers_and_wheel_tags():
-    environment = sources.marker_environment_for_python("3.11")
-    assert environment["python_version"] == "3.11"
-    assert environment["python_full_version"] == "3.11.0"
-    tags = sources.compatible_tags_for_python("3.11")
-    assert any(tag.interpreter == "cp311" and tag.abi == "cp311" for tag in tags)
-    assert any(
-        tag.interpreter == "py3" and tag.abi == "none" and tag.platform == "any" for tag in tags
-    )
-    assert not any(
-        tag.interpreter == "cp311" and tag.abi == "cp311" and tag.platform == "any" for tag in tags
-    )
-
-
-def test_locked_wheel_selection_uses_compatible_hashed_artifact():
-    lock = {
-        "package": [
-            {
-                "name": "demo-package",
-                "version": "1.0",
-                "source": {"registry": "https://pypi.org/simple"},
-                "wheels": [
-                    {
-                        "url": "https://files.example/demo_package-1.0-cp311-cp311-win_amd64.whl",
-                        "hash": "sha256:" + "1" * 64,
-                    },
-                    {
-                        "url": "https://files.example/demo_package-1.0-py3-none-any.whl",
-                        "hash": "sha256:" + "2" * 64,
-                    },
-                ],
-            }
-        ]
-    }
-    artifacts = sources.select_locked_wheel_artifacts(
-        lock,
-        [Requirement("demo-package==1.0")],
-        "linux-x86_64",
-        compatible_tags=[Tag("py3", "none", "any")],
-    )
-    assert artifacts == [
-        {
-            "name": "demo-package",
-            "version": "1.0",
-            "filename": "demo_package-1.0-py3-none-any.whl",
-            "url": "https://files.example/demo_package-1.0-py3-none-any.whl",
-            "sha256": "2" * 64,
-            "platforms": ["linux-x86_64"],
-        }
-    ]
 
 
 def wheel(path, name="published_worker", version="2.0", requires=()):

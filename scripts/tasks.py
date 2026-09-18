@@ -6,7 +6,6 @@
 import os
 import subprocess
 import tomllib
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,7 +113,35 @@ def package_wheel(ctx: Context):
             )
     if manifest["load"].get("runtime") == "python":
         manifest["source"]["manifest_root"] = "."
-        _write_wheel_adapter(ctx, wheel_backend)
+        for name in [
+            "pyproject.toml",
+            "relay_wheel_backend.py",
+            "package-source.json",
+            "wheelhouse",
+        ]:
+            if (ctx.bundle / name).exists():
+                raise ValueError(f"wheel uses a reserved adapter path: {name}")
+        shutil.copytree(ctx.output / "wheels", ctx.bundle / "wheelhouse")
+        shutil.copy2(ctx.output / "package-source.json", ctx.bundle / "package-source.json")
+        shutil.copy2(wheel_backend.__file__, ctx.bundle / "relay_wheel_backend.py")
+        notices = ctx.bundle / "notices/relay-wheel-adapter"
+        notices.mkdir(parents=True)
+        repository = Path(__file__).resolve().parents[1]
+        for filename in ["LICENSE", "NOTICE"]:
+            if (repository / filename).is_file():
+                shutil.copy2(repository / filename, notices / filename)
+        (ctx.bundle / "pyproject.toml").write_text(
+            tomli_w.dumps(
+                {
+                    "build-system": {
+                        "requires": [],
+                        "build-backend": "relay_wheel_backend",
+                        "backend-path": ["."],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
     elif "entrypoint" in manifest["load"]:
         manifest["load"]["entrypoint"] = (
             checked_path(ctx.source_root, original.parent, manifest["load"]["entrypoint"])
@@ -125,69 +152,3 @@ def package_wheel(ctx: Context):
         raise ValueError("package_wheel writes relay-plugin.toml at the bundle root")
     write_runtime_manifest(ctx.bundle, manifest)
     write_attributions(ctx)
-
-
-def _write_wheel_adapter(ctx: Context, wheel_backend=None) -> None:
-    """Attach the generic locked-wheel installer used by Relay project installs."""
-    import shutil
-    from scripts import wheel_backend as default_backend
-
-    wheel_backend = wheel_backend or default_backend
-    for name in [
-        "pyproject.toml",
-        "relay_wheel_backend.py",
-        "package-source.json",
-        "wheelhouse",
-    ]:
-        if (ctx.bundle / name).exists():
-            raise ValueError(f"wheel uses a reserved adapter path: {name}")
-    shutil.copytree(ctx.output / "wheels", ctx.bundle / "wheelhouse")
-    shutil.copy2(ctx.output / "package-source.json", ctx.bundle / "package-source.json")
-    shutil.copy2(wheel_backend.__file__, ctx.bundle / "relay_wheel_backend.py")
-    notices = ctx.bundle / "notices/relay-wheel-adapter"
-    notices.mkdir(parents=True)
-    repository = Path(__file__).resolve().parents[1]
-    for filename in ["LICENSE", "NOTICE"]:
-        if (repository / filename).is_file():
-            shutil.copy2(repository / filename, notices / filename)
-    (ctx.bundle / "pyproject.toml").write_text(
-        tomli_w.dumps(
-            {
-                "build-system": {
-                    "requires": [],
-                    "build-backend": "relay_wheel_backend",
-                    "backend-path": ["."],
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
-def package_locked_python_project(ctx: Context, project_wheel: Path, manifest: dict) -> dict:
-    """Attach a lock-derived wheelhouse to an already materialized in-tree worker bundle."""
-    from scripts.package_sources import prepare_locked_project_wheelhouse
-
-    if manifest.get("load", {}).get("runtime") != "python":
-        raise ValueError("locked Python project packaging requires a Python worker manifest")
-    artifact = manifest.get("source", {}).get("artifact")
-    if not isinstance(artifact, str) or not artifact:
-        raise ValueError("locked Python project packaging requires source.artifact")
-    bundled_artifact = ctx.bundle / artifact
-    if not bundled_artifact.is_file():
-        raise FileNotFoundError(bundled_artifact)
-    with zipfile.ZipFile(project_wheel) as stream:
-        names = [name for name in stream.namelist() if name == artifact]
-        if len(names) != 1 or stream.read(names[0]) != bundled_artifact.read_bytes():
-            raise ValueError("built project wheel does not contain the packaged runtime artifact")
-    identity = prepare_locked_project_wheelhouse(
-        ctx.source,
-        project_wheel,
-        ctx.release["toolchains"]["python"],
-        ctx.platform,
-        ctx.output,
-        ctx.plugin.parent.parent / ".cache/packages",
-    )
-    manifest["source"]["manifest_root"] = "."
-    _write_wheel_adapter(ctx)
-    return identity

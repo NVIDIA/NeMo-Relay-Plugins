@@ -1,19 +1,14 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # NeMo Guardrails for NeMo Relay
 
 This plugin runs NeMo Guardrails 0.24.1 as a Relay-managed Python worker. It
 checks LLM and tool traffic while Relay continues to own routing, caching,
 provider calls, tool execution, and observability.
-
-## Status
-
-> **Unreleased. Do not publish this plugin until its full install and smoke
-> matrix passes against a released Relay host.**
-
-The plugin uses the Relay 0.9 worker contract and pins both Relay Python
-dependencies to 0.9.0. Its Linux install path currently also needs a Relay fix
-for the standard Python `lib64 -> lib` virtual-environment alias. Until that fix
-ships in a Relay patch release, CI uses the reviewed host commit directly.
 
 ## What it supports
 
@@ -64,14 +59,11 @@ Choose one backend:
 
 The evaluator can differ from the application provider. The base archive
 supports OpenAI-compatible evaluators, including compatible NVIDIA NIM
-endpoints. Native Anthropic evaluation requires the optional
-`langchain-anthropic` build profile. Other LangChain provider engines are not
-supported.
-
-Optional custom-build profiles also exist for Presidio, YARA, Hugging Face,
-Cleanlab, Google Cloud moderation, and Guardrails AI. They are not included in
-the standard archive and require deployment-specific testing.
-Local jailbreak detectors are also outside the standard archive.
+endpoints. Native Anthropic evaluation and catalog integrations that require
+Presidio, YARA, Hugging Face, Cleanlab, Google Cloud moderation, Guardrails AI,
+or other optional packages are not included in the standard archive. A custom
+build may supply compatible dependencies, but those combinations are outside
+this release's support and test matrix.
 
 ## Known limits
 

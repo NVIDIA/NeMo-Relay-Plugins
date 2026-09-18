@@ -24,7 +24,7 @@ This project is currently not accepting contributions.
 
 A **worker** is a separate process. A **native plugin** is a library loaded into
 Relay itself. Switchyard supports all five platforms listed below. The Python
-workers do not support Windows ARM64; the other plugins support all five.
+worker does not support Windows ARM64; the other examples support all five.
 
 - `linux-x86_64`
 - `linux-arm64`
@@ -66,7 +66,7 @@ The runtime artifact depends on the plugin:
 | Plugin | Runtime and additional bundle contents |
 | --- | --- |
 | Switchyard | Platform shared library and Switchyard third-party notices. |
-| NeMo Guardrails | Python source package, locked wheelhouse, configuration schema, examples, and migration guide. |
+| NeMo Guardrails | Python source package, `pyproject.toml`, `uv.lock`, configuration schema, examples, and migration guide. |
 | Python gRPC worker | Python source package, `pyproject.toml`, and `uv.lock`. |
 | Rust gRPC worker | Platform worker executable. |
 | Rust native example | Platform shared library. |
