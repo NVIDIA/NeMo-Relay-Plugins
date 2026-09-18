@@ -1,4 +1,8 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Updating package credits and licenses
 
 Attribution files list the packages a project uses and include their license

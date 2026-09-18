@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
 """Attributions from exact published package bytes and locked crate dependencies."""
 
 import tempfile

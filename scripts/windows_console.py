@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
 """Send Ctrl+C to the private console of a smoke-test gateway.
 
 Run in a helper process so attaching to Relay never detaches the test runner
