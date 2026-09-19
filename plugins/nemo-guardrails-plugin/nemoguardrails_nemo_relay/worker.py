@@ -34,7 +34,7 @@ from .action_safety import (  # noqa: E402
 )
 from .check_backend import RemoteChecksBackend, RemoteChecksSettings  # noqa: E402
 from .codec_projection import (  # noqa: E402
-    _NativeCodecProjector,
+    _ProviderProjector,
 )
 from .configuration import (  # noqa: E402
     _NO_CONTENT_LOG_LEVEL,
@@ -139,7 +139,7 @@ class NeMoGuardrailsRelayWorker(WorkerPlugin):
     async def _initialize_remote_runtime(
         self,
         settings: dict[str, Json],
-        projector: _NativeCodecProjector,
+        projector: _ProviderProjector,
         semantic_settings: SemanticToolSettings,
         timeout_ms: int,
     ) -> _RuntimeBindings:
@@ -163,7 +163,7 @@ class NeMoGuardrailsRelayWorker(WorkerPlugin):
         settings: dict[str, Json],
         rails_config: RailsConfig,
         runtime_plan: RuntimePlan,
-        projector: _NativeCodecProjector,
+        projector: _ProviderProjector,
         semantic_settings: SemanticToolSettings,
         timeout_ms: int,
     ) -> _RuntimeBindings:
@@ -349,7 +349,7 @@ class NeMoGuardrailsRelayWorker(WorkerPlugin):
             await self._ensure_legacy_plugin_is_inactive(ctx)
 
             timeout_ms = cast(int, settings.get("check_timeout_ms", DEFAULT_CHECK_TIMEOUT_MS))
-            projector = _NativeCodecProjector(payload_policy_from_config(settings.get("payload_policy")))
+            projector = _ProviderProjector(payload_policy_from_config(settings.get("payload_policy")))
             mutation_policy = mutation_policy_from_config(settings.get("mutation_policy"))
             semantic_settings = semantic_tool_settings_from_config(settings.get("semantic_tool_policy"))
             decision_marks = PolicyDecisionMarks(

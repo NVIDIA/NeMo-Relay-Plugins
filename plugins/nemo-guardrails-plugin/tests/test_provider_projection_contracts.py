@@ -35,7 +35,7 @@ def test_output_projection_rejects_unknown_oci_chat_response_siblings(protocol: 
         request, response = combined_protocol_case(protocol)
         allow_tool_calls = True
     response["chatResponse"]["futureExplanation"] = "UNCHECKED_CANARY"  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -49,7 +49,7 @@ def test_anthropic_output_rejects_stop_details_explanation() -> None:
         "category": "safety",
         "explanation": "UNCHECKED_CANARY",
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -77,7 +77,7 @@ def test_gemini_output_checks_all_text_when_empty_metadata_forces_normalized_par
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(gemini_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "one\ntwo"
@@ -105,7 +105,7 @@ def test_openai_responses_output_preserves_ordered_refusal_and_text_for_guardrai
         # The Responses aggregate contains output_text blocks, not refusals.
         "output_text": "safe alternative",
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(responses_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "declined\nsafe alternative"
@@ -128,7 +128,7 @@ def test_openai_responses_output_accepts_message_phase(phase: str) -> None:
         ],
         "output_text": "safe",
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(responses_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"
@@ -151,7 +151,7 @@ def test_openai_responses_refusal_accepts_only_an_empty_aggregate(
     }
     if aggregate is not None:
         response["output_text"] = aggregate
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(responses_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "declined"
@@ -170,7 +170,7 @@ def test_openai_responses_refusal_rejects_unrepresented_aggregate_text() -> None
         ],
         "output_text": "unchecked application text",
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(responses_request(), require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -213,7 +213,7 @@ def test_oci_output_accepts_nullable_tool_call_arrays(api_format: str) -> None:
                 },
             }
         }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     text_request = projector.project_text(oci_request(api_format), require_user=True)
     tool_request = projector.project_tools(oci_request(api_format), require_definitions=False)
 
@@ -239,7 +239,7 @@ def test_openai_responses_replayed_assistant_text_accepts_empty_provider_metadat
         {"role": "user", "content": [{"type": "input_text", "text": "follow-up"}]},
     ]
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "prior answer"},
         {"role": "user", "content": "follow-up"},
@@ -261,7 +261,7 @@ def test_openai_chat_replayed_assistant_accepts_empty_provider_metadata() -> Non
         ]
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "prior answer"},
         {"role": "user", "content": "follow-up"},
@@ -280,7 +280,7 @@ def test_anthropic_replayed_text_accepts_empty_citations(citations: object) -> N
         {"role": "user", "content": "follow-up"},
     ]
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "prior answer"},
         {"role": "user", "content": "follow-up"},
@@ -305,7 +305,7 @@ def test_anthropic_replayed_text_rejects_nonempty_citations() -> None:
     ]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 def test_openai_chat_replayed_assistant_rejects_audio_output() -> None:
@@ -324,14 +324,14 @@ def test_openai_chat_replayed_assistant_rejects_audio_output() -> None:
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 @pytest.mark.parametrize("logprobs", [None, [], {}])
 def test_openai_chat_output_accepts_empty_logprobs(logprobs: object) -> None:
     response = chat_response()
     response["choices"][0]["logprobs"] = logprobs  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(chat_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"
@@ -364,7 +364,7 @@ def test_gemini_output_rejects_unchecked_candidate_metadata(field: str, value: o
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(gemini_request(), require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -383,7 +383,7 @@ def test_gemini_output_accepts_empty_candidate_metadata() -> None:
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(gemini_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"
@@ -394,7 +394,7 @@ def test_gemini_output_rejects_unchecked_model_status_message() -> None:
         "candidates": [{"content": {"role": "model", "parts": [{"text": "safe"}]}}],
         "modelStatus": {"modelStage": "STABLE", "message": "unchecked provider notice"},
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(gemini_request(), require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -410,7 +410,7 @@ def test_gemini_output_accepts_model_status_without_visible_message() -> None:
             "message": "",
         },
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(gemini_request(), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"
@@ -422,7 +422,7 @@ def test_gemini_input_accepts_empty_thought_metadata() -> None:
         {"partMetadata": {}, "thought": False, "thoughtSignature": ""}
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 @pytest.mark.parametrize(
@@ -438,7 +438,7 @@ def test_gemini_input_rejects_nonempty_thought_metadata(field: str, value: objec
     request["content"]["contents"][0]["parts"][0][field] = value  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 @pytest.mark.parametrize(
@@ -458,7 +458,7 @@ def test_oci_cohere_output_rejects_unchecked_response_metadata(field: str, value
             field: value,
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(oci_request("COHERE"), require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -476,7 +476,7 @@ def test_oci_cohere_output_accepts_empty_response_metadata() -> None:
             "errorMessage": "",
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(oci_request("COHERE"), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"
@@ -499,7 +499,7 @@ def test_oci_cohere_v2_output_rejects_unchecked_response_metadata(field: str, va
             field: value,
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(oci_request("COHEREV2"), require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -517,7 +517,7 @@ def test_oci_cohere_v2_output_accepts_empty_response_metadata() -> None:
             "errorMessage": "",
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(oci_request("COHEREV2"), require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == "safe"

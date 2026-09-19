@@ -102,7 +102,7 @@ from nemoguardrails_nemo_relay import (
 def test_final_answer_only_policy_checks_text_and_preserves_reasoning(
     payload: dict[str, object], response: dict[str, object]
 ) -> None:
-    projector = codec_projection._NativeCodecProjector(
+    projector = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.FINAL_ANSWER_ONLY)
     )
     decoded = projector.project_text(payload, require_user=True)
@@ -211,7 +211,7 @@ def test_check_output_policy_projects_plaintext_reasoning_separately(
     response: dict[str, object],
     expected_reasoning: tuple[str, ...],
 ) -> None:
-    projector = codec_projection._NativeCodecProjector(
+    projector = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.CHECK_OUTPUT)
     )
     decoded = projector.project_text(payload, require_user=True)
@@ -256,7 +256,7 @@ def test_check_output_policy_rejects_reasoning_that_cannot_be_inspected(
     response: dict[str, object],
 ) -> None:
     request = responses_request() if response.get("object") == "response" else anthropic_request()
-    projector = codec_projection._NativeCodecProjector(
+    projector = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.CHECK_OUTPUT)
     )
     decoded = projector.project_text(request, require_user=True)
@@ -333,8 +333,55 @@ def test_check_output_policy_rejects_reasoning_that_cannot_be_inspected(
 def test_text_only_policy_checks_text_while_preserving_supported_modalities(
     payload: dict[str, object],
 ) -> None:
-    projector = codec_projection._NativeCodecProjector(
+    projector = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(multimodal=payload_policy.MultimodalPolicy.TEXT_ONLY)
     )
 
     assert projector.project(payload) == [{"role": "user", "content": "describe"}]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        chat_request(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "describe"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,AA=="},
+                            "future_prompt": "unchecked",
+                        },
+                    ],
+                }
+            ]
+        ),
+        responses_request(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "describe"},
+                        {
+                            "type": "input_image",
+                            "image_url": "data:image/png;base64,AA==",
+                            "future_prompt": "unchecked",
+                        },
+                    ],
+                }
+            ]
+        ),
+    ],
+    ids=["chat", "responses"],
+)
+def test_text_only_policy_rejects_unknown_fields_on_supported_modalities(
+    payload: dict[str, object],
+) -> None:
+    projector = codec_projection._ProviderProjector(
+        payload_policy.PayloadPolicy(multimodal=payload_policy.MultimodalPolicy.TEXT_ONLY)
+    )
+
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        projector.project(payload)

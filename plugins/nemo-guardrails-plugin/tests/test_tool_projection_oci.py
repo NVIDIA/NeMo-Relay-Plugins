@@ -21,7 +21,7 @@ def test_oci_generic_response_call_cannot_mix_arguments_and_parameters() -> None
     broken = deepcopy(response)
     call = broken["chatResponse"]["choices"][0]["message"]["toolCalls"][0]  # type: ignore[index]
     call["parameters"] = {"city": "Paris"}  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -29,7 +29,7 @@ def test_oci_generic_response_call_cannot_mix_arguments_and_parameters() -> None
 
 def test_oci_cohere_v2_projects_definitions_calls_and_results() -> None:
     request, response = oci_cohere_v2_case()
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -43,7 +43,7 @@ def test_oci_cohere_v2_projects_definitions_calls_and_results() -> None:
 def test_oci_cohere_v2_tool_plan_metadata_is_not_mistaken_for_a_call() -> None:
     request, response = oci_cohere_v2_case()
     response["chatResponse"]["message"]["toolPlan"] = "I will check the weather."  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     calls = projector.project_response_tools(projector.project_tools(request), response)
 
@@ -62,7 +62,7 @@ def test_oci_generic_message_metadata_is_opaque_to_structural_checks_only() -> N
             "reasoningContent": "private reasoning",
         }
     )
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
 
@@ -89,7 +89,7 @@ def test_oci_cohere_v2_message_metadata_is_opaque_to_structural_checks_only() ->
             ],
         }
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
 
@@ -115,7 +115,7 @@ def test_oci_cohere_v2_response_tool_citation_is_not_mistaken_for_a_call() -> No
             ],
         }
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_tools(request)
 
     calls = projector.project_response_tools(decoded, response)
@@ -154,7 +154,7 @@ def test_oci_structural_metadata_remains_format_and_role_scoped(
     target[field] = value
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("role", ["USER", "SYSTEM", "TOOL"])
@@ -163,7 +163,7 @@ def test_oci_calls_on_non_assistant_roles_are_rejected(role: str) -> None:
     request["content"]["chatRequest"]["messages"][1]["role"] = role  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("role", ["USER", "SYSTEM", "ASSISTANT"])
@@ -172,7 +172,7 @@ def test_oci_result_ids_on_non_tool_roles_are_rejected(role: str) -> None:
     request["content"]["chatRequest"]["messages"][2]["role"] = role  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("call_type", [None, "CUSTOM"])
@@ -183,7 +183,7 @@ def test_oci_cohere_v2_response_requires_function_call_type(call_type: str | Non
         call.pop("type")  # type: ignore[union-attr]
     else:
         call["type"] = call_type  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -216,7 +216,7 @@ async def test_oci_cohere_v1_validates_emitted_calls_with_synthesized_ids() -> N
             "finishReason": "COMPLETE",
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -284,7 +284,7 @@ def test_oci_cohere_v1_translates_json_compatible_python_types(
         },
     }
 
-    definition = codec_projection._NativeCodecProjector().project_tools(request).projection.definitions[0]
+    definition = codec_projection._ProviderProjector().project_tools(request).projection.definitions[0]
 
     assert definition.input_schema["properties"]["value"] == expected  # type: ignore[index]
 
@@ -333,7 +333,7 @@ def test_oci_cohere_v1_rejects_unsupported_parameter_types(parameter_type: objec
     }
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 async def test_oci_cohere_v1_assigns_distinct_ids_to_parallel_calls() -> None:
@@ -364,7 +364,7 @@ async def test_oci_cohere_v1_assigns_distinct_ids_to_parallel_calls() -> None:
             "finishReason": "COMPLETE",
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_tools(request)
 
     calls = projector.project_response_tools(decoded, response)
@@ -385,7 +385,7 @@ def test_oci_cohere_v1_accepts_a_no_argument_definition() -> None:
         },
     }
 
-    definition = codec_projection._NativeCodecProjector().project_tools(request).projection.definitions[0]
+    definition = codec_projection._ProviderProjector().project_tools(request).projection.definitions[0]
 
     assert definition.input_schema == {
         "additionalProperties": False,
@@ -401,7 +401,7 @@ def test_oci_generic_does_not_accept_a_cohere_v1_definition_shape() -> None:
     ]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_oci_cohere_v1_result_linkage_remains_unsupported() -> None:
@@ -429,7 +429,7 @@ def test_oci_cohere_v1_result_linkage_remains_unsupported() -> None:
     }
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_oci_provider_native_content_cannot_hide_tool_traffic() -> None:
@@ -443,4 +443,4 @@ def test_oci_provider_native_content_cannot_hide_tool_traffic() -> None:
     ]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)

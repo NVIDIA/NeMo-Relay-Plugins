@@ -37,7 +37,7 @@ def test_gemini_execution_and_result_schema_controls_remain_outside_structural_s
             "allowedFunctionNames": ["weather"],
         }
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(controlled)
     calls = projector.project_response_tools(decoded, response)
@@ -75,7 +75,7 @@ def test_gemini_tool_finish_reason_without_a_function_call_rejects(
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -96,7 +96,7 @@ def test_gemini_invalid_tool_finish_reason_rejects_even_with_a_function_call(
 ) -> None:
     request, response = gemini_generate_content_case()
     response["candidates"][0]["finishReason"] = finish_reason  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -105,7 +105,7 @@ def test_gemini_invalid_tool_finish_reason_rejects_even_with_a_function_call(
 def test_gemini_object_function_response_uses_the_codec_normalization() -> None:
     request, _ = gemini_generate_content_case()
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert projection.exchanges[0].results[0].content == '{"result":"sunny"}'
 
@@ -116,7 +116,7 @@ def test_gemini_candidate_metadata_does_not_hide_function_calls() -> None:
     enriched["candidates"][0]["safetyRatings"] = [  # type: ignore[index]
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "probability": "NEGLIGIBLE"}
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     calls = projector.project_response_tools(projector.project_tools(request), enriched)
 
@@ -129,7 +129,7 @@ def test_unknown_gemini_response_part_cannot_hide_a_future_tool_call() -> None:
     broken["candidates"][0]["content"]["parts"] = [  # type: ignore[index]
         {"futureToolCall": {"name": "weather", "args": {"city": "Rome"}}}
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -141,7 +141,7 @@ def test_gemini_signed_thought_history_is_allowed_for_structural_checks_only() -
     parts = signed["content"]["contents"][1]["parts"]  # type: ignore[index]
     parts.insert(0, {"text": "private reasoning", "thought": True, "thoughtSignature": "sig-1"})
     parts[1]["thoughtSignature"] = "sig-2"
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(signed)
 
@@ -158,7 +158,7 @@ def test_gemini_tool_usage_metadata_is_not_mistaken_for_a_call() -> None:
         "toolUsePromptTokensDetails": [{"modality": "TEXT", "tokenCount": 3}],
         "totalTokenCount": 20,
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     calls = projector.project_response_tools(projector.project_tools(request), response)
 
@@ -170,7 +170,7 @@ def test_gemini_parameters_json_schema_is_used_for_argument_validation() -> None
     declaration = request["content"]["tools"][0]["functionDeclarations"][0]  # type: ignore[index]
     declaration.pop("parameters")  # type: ignore[union-attr]
     declaration["parametersJsonSchema"] = json_object_schema()  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     projection = projector.project_tools(request).projection
 
@@ -183,14 +183,14 @@ def test_null_gemini_parameters_falls_back_to_parameters_json_schema() -> None:
     declaration["parameters"] = None  # type: ignore[index]
     declaration["parametersJsonSchema"] = json_object_schema()  # type: ignore[index]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert projection.definitions[0].input_schema == json_object_schema()
 
 
 async def test_native_gemini_schema_types_are_translated_before_guardrails_validation() -> None:
     request, response = gemini_generate_content_case()
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -209,7 +209,7 @@ async def test_native_gemini_schema_type_casing_is_supported(object_type: str, s
     schema = request["content"]["tools"][0]["functionDeclarations"][0]["parameters"]  # type: ignore[index]
     schema["type"] = object_type  # type: ignore[index]
     schema["properties"]["city"]["type"] = string_type  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -239,7 +239,7 @@ async def test_native_gemini_int64_schema_bounds_are_translated() -> None:
         "city": "Rome",
         "aliases": ["Roma"],
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -258,7 +258,7 @@ def test_invalid_gemini_int64_schema_bounds_fail_coverage_projection(bound: obje
     declaration["parameters"]["minProperties"] = bound  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="tool traffic is not completely covered"):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_unsupported_gemini_schema_dialect_fails_coverage_projection() -> None:
@@ -267,7 +267,7 @@ def test_unsupported_gemini_schema_dialect_fails_coverage_projection() -> None:
     declaration["parameters"]["futureSchemaKeyword"] = {"tool": "hidden"}  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="tool traffic is not completely covered"):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_deep_gemini_schema_fails_with_bounded_coverage_error() -> None:
@@ -279,13 +279,13 @@ def test_deep_gemini_schema_fails_with_bounded_coverage_error() -> None:
     declaration["parameters"] = schema  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="tool traffic is not completely covered"):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_gemini_tool_selection_control_is_compatible_with_text_input_rails() -> None:
     gemini, _ = gemini_generate_content_case()
     gemini["content"]["toolConfig"] = {"functionCallingConfig": {"mode": "AUTO"}}  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     assert projector.project_tools(gemini).projection.definitions[0].name == "weather"
     assert projector.project(
@@ -298,7 +298,7 @@ def test_gemini_tool_selection_control_is_compatible_with_text_input_rails() -> 
 def test_gemini_cached_content_cannot_hide_tool_history() -> None:
     request, _ = gemini_generate_content_case()
     request["content"]["cachedContent"] = "cachedContents/private-history"  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="provider codec could not verify"):
         projector.project_tools(request)
@@ -310,7 +310,7 @@ async def test_gemini_function_response_name_must_match_call_id() -> None:
     response["name"] = "different_function"  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 async def test_gemini_function_response_with_wrong_id_is_policy_blocked() -> None:
@@ -318,7 +318,7 @@ async def test_gemini_function_response_with_wrong_id_is_policy_blocked() -> Non
     response = request["content"]["contents"][2]["parts"][0]["functionResponse"]  # type: ignore[index]
     response["id"] = "missing-call"  # type: ignore[index]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert (await check_results(projection.exchanges)).kind is ToolVerdictKind.POLICY_BLOCK
 
@@ -333,7 +333,7 @@ async def test_gemini_missing_response_id_uses_unique_prior_call(
     response.pop("id")  # type: ignore[union-attr]
     if omit_call_id:
         call.pop("id")  # type: ignore[union-attr]
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     exchange = projection.exchanges[0]
     expected_id = "weather" if omit_call_id else "call-1"
@@ -352,7 +352,7 @@ async def test_parallel_gemini_results_without_ids_link_by_unique_name() -> None
         {"functionResponse": {"name": "search", "response": {"result": "found"}}},
     ]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request, require_definitions=False).projection
+    projection = codec_projection._ProviderProjector().project_tools(request, require_definitions=False).projection
 
     exchange = projection.exchanges[0]
     assert [result.call_id for result in exchange.results] == ["call-1", "call-2"]
@@ -380,7 +380,7 @@ def test_gemini_part_metadata_is_opaque_only_to_structural_checks() -> None:
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
 
@@ -406,7 +406,7 @@ def test_gemini_generator_function_results_are_outside_v1_contract(field: str) -
     response[field] = True if field == "willContinue" else "SILENT"  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("field", ["functionCall", "functionResponse"])
@@ -420,4 +420,40 @@ def test_gemini_function_extensions_cannot_hide_tool_traffic(field: str) -> None
     value["mcp_call"] = {"name": "hidden"}  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
+
+
+@pytest.mark.parametrize("field", ["functionCall", "functionResponse"])
+def test_gemini_tool_parts_must_be_objects(field: str) -> None:
+    request, _ = gemini_generate_content_case()
+    content_index = 1 if field == "functionCall" else 2
+    request["content"]["contents"][content_index]["parts"] = [{field: "invalid"}]  # type: ignore[index]
+
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        codec_projection._ProviderProjector().project_tools(request)
+
+
+def test_gemini_part_cannot_mix_text_and_a_function_call() -> None:
+    request, _ = gemini_generate_content_case()
+    call_part = request["content"]["contents"][1]["parts"][0]  # type: ignore[index]
+    call_part["text"] = "unchecked"  # type: ignore[index]
+
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        codec_projection._ProviderProjector().project_tools(request)
+
+
+def test_gemini_system_instruction_cannot_hide_tool_or_metadata_state() -> None:
+    request, _ = gemini_generate_content_case()
+    projector = codec_projection._ProviderProjector()
+
+    request["content"]["systemInstruction"] = {  # type: ignore[index]
+        "parts": [{"functionCall": {"name": "weather", "args": {}}}]
+    }
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        projector.project_tools(request)
+
+    request["content"]["systemInstruction"] = {  # type: ignore[index]
+        "parts": [{"text": "policy", "partMetadata": {"future_prompt": "unchecked"}}]
+    }
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        projector.project(request, allow_structural_tools=True, allow_tool_results=True)

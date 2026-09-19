@@ -22,7 +22,7 @@ async def test_adjacent_chat_assistant_turns_are_not_merged_into_one_exchange() 
     messages.insert(2, second_call)  # type: ignore[union-attr]
     messages.append({"role": "tool", "tool_call_id": "call-2", "content": "rainy"})  # type: ignore[union-attr]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
     verdict = await check_results(projection.exchanges)
 
     assert len(projection.exchanges) == 2
@@ -52,7 +52,7 @@ def test_openai_chat_assistant_metadata_does_not_hide_valid_tool_history(
         assistant[field] = value  # type: ignore[index]
     original = deepcopy(request)
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert projection.exchanges[0].calls[0].call_id == "call-1"
     assert projection.exchanges[0].calls[0].name == "weather"
@@ -78,7 +78,7 @@ def test_legacy_openai_function_call_is_not_misreported_as_checked() -> None:
             }
         ],
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -88,7 +88,7 @@ def test_non_function_openai_chat_call_is_not_retyped_as_a_function() -> None:
     request, response = openai_chat_case()
     broken = deepcopy(response)
     broken["choices"][0]["message"]["tool_calls"][0]["type"] = "hosted_search"  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -101,12 +101,12 @@ def test_missing_openai_chat_arguments_are_not_defaulted_to_an_empty_object(loca
         function = request["content"]["messages"][1]["tool_calls"][0]["function"]  # type: ignore[index]
         del function["arguments"]  # type: ignore[index]
         with pytest.raises(codec_projection._UnsupportedRequest):
-            codec_projection._NativeCodecProjector().project_tools(request)
+            codec_projection._ProviderProjector().project_tools(request)
         return
 
     function = response["choices"][0]["message"]["tool_calls"][0]["function"]  # type: ignore[index]
     del function["arguments"]  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
 
@@ -117,7 +117,7 @@ def test_non_function_openai_chat_history_call_is_not_silently_dropped() -> None
     broken["content"]["messages"][1]["tool_calls"][0]["type"] = "custom"  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)
 
 
 def test_openai_chat_content_part_cannot_hide_tool_traffic() -> None:
@@ -135,7 +135,7 @@ def test_openai_chat_content_part_cannot_hide_tool_traffic() -> None:
     }
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("role", ["user", "assistant", "system"])
@@ -149,7 +149,7 @@ def test_openai_chat_tool_result_id_on_wrong_role_is_rejected(role: str) -> None
     }
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("field", ["custom_tool_calls", "tool_call", "server_tool_use"])
@@ -159,7 +159,7 @@ def test_unmodeled_openai_chat_response_tool_fields_are_rejected(field: str) -> 
     message = broken["choices"][0]["message"]  # type: ignore[index]
     message.pop("tool_calls")  # type: ignore[union-attr]
     message[field] = {"name": "weather", "arguments": "{}"}  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -177,7 +177,7 @@ def test_mixed_openai_response_envelopes_are_rejected() -> None:
             "arguments": "{}",
         }
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -198,7 +198,7 @@ def test_structural_extensions_inside_openai_chat_calls_are_rejected(
     call = response["choices"][0]["message"]["tool_calls"][0]  # type: ignore[index]
     target = call if location == "call" else call["function"]  # type: ignore[index]
     target.update(payload)  # type: ignore[union-attr]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -210,7 +210,7 @@ def test_non_json_openai_number_is_rejected_during_projection() -> None:
     broken["content"]["messages"][1]["tool_calls"][0]["function"]["arguments"] = '{"city":NaN}'  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)
 
 
 def test_malformed_tool_arguments_are_rejected_during_projection() -> None:
@@ -219,4 +219,4 @@ def test_malformed_tool_arguments_are_rejected_during_projection() -> None:
     broken["content"]["messages"][1]["tool_calls"][0]["function"]["arguments"] = "not-json"  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)

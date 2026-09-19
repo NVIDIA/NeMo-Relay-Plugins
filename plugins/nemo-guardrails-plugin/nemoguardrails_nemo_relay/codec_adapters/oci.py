@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 from ..payload_policy import PayloadPolicy, ReasoningPolicy
+from ..structural_tools import ToolCall
 from .common import (
     RawResponseText,
     _reject_nonempty_metadata,
@@ -16,6 +18,8 @@ from .common import (
     _required_json_object_text,
     _structural_key,
     _UnsupportedRequest,
+    normalized_annotation,
+    tool_call,
 )
 
 API_FORMATS = frozenset({"GENERIC", "COHERE", "COHEREV2"})
@@ -59,6 +63,189 @@ RESPONSE_KEYS_BY_FORMAT = {
         }
     ),
 }
+REQUEST_KEYS_BY_FORMAT = {
+    "GENERIC": frozenset({"apiFormat", "messages", "maxTokens", "temperature", "topP", "stop", "tools", "toolChoice"}),
+    "COHERE": frozenset(
+        {
+            "apiFormat",
+            "message",
+            "chatHistory",
+            "preambleOverride",
+            "maxTokens",
+            "temperature",
+            "topP",
+            "stopSequences",
+            "tools",
+            "toolChoice",
+        }
+    ),
+    "COHEREV2": frozenset(
+        {"apiFormat", "messages", "maxTokens", "temperature", "topP", "stopSequences", "tools", "toolChoice"}
+    ),
+}
+
+
+def _content(value: object) -> object:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        raise _UnsupportedRequest("OCI content must be text or an array")
+    parts: list[dict[str, Any]] = []
+    for value in value:
+        if not isinstance(value, dict):
+            raise _UnsupportedRequest("OCI content part must be an object")
+        if value.get("type") == "TEXT" and isinstance(value.get("text", ""), str):
+            parts.append(
+                {
+                    "type": "text",
+                    "text": value.get("text", ""),
+                    **{k: v for k, v in value.items() if k not in {"type", "text"}},
+                }
+            )
+        else:
+            parts.append(
+                {
+                    "type": "provider_native",
+                    "provider": "oci_genai",
+                    "kind": value.get("type", "unknown"),
+                    "value": value,
+                }
+            )
+    if not parts:
+        return None
+    if all(set(part) == {"text", "type"} for part in parts):
+        return "".join(cast(str, part["text"]) for part in parts)
+    return parts
+
+
+def _call(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise _UnsupportedRequest("OCI tool call must be an object")
+    function = value.get("function")
+    source = function if isinstance(function, dict) else value
+    name = source.get("name")
+    arguments = source.get("arguments", {})
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, separators=(",", ":"), sort_keys=True)
+    return {"id": value.get("id", name), "type": "function", "function": {"name": name, "arguments": arguments}}
+
+
+def _generic_message(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise _UnsupportedRequest("OCI message must be an object")
+    role = str(value.get("role", "USER")).lower()
+    if role not in {"assistant", "system", "tool", "user"}:
+        return {"role": "provider_native", "provider": "oci_genai", "kind": role, "value": value}
+    message: dict[str, Any] = {"role": role}
+    if value.get("content") is not None:
+        normalized_content = _content(value["content"])
+        if normalized_content is not None:
+            message["content"] = normalized_content
+    if value.get("toolCalls") is not None:
+        message["tool_calls"] = [_call(call) for call in value["toolCalls"]]
+    if role == "tool":
+        message["tool_call_id"] = value.get("toolCallId")
+    return message
+
+
+def request_annotation(content: dict[str, Any]) -> dict[str, Any]:
+    chat = content.get("chatRequest", content)
+    if not isinstance(chat, dict):
+        raise _UnsupportedRequest("OCI chat request must be an object")
+    variant = str(chat.get("apiFormat", "GENERIC")).upper()
+    modeled = REQUEST_KEYS_BY_FORMAT.get(variant)
+    if modeled is None:
+        raise _UnsupportedRequest("OCI apiFormat is unsupported")
+    messages: list[dict[str, Any]] = []
+    if variant == "COHERE":
+        preamble = chat.get("preambleOverride")
+        if preamble not in (None, ""):
+            if not isinstance(preamble, str):
+                raise _UnsupportedRequest("OCI preamble must be text")
+            messages.append({"role": "system", "content": preamble})
+        history = chat.get("chatHistory", [])
+        if not isinstance(history, list):
+            raise _UnsupportedRequest("OCI chat history must be an array")
+        for value in history:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OCI chat history turn is invalid")
+            role = {"CHATBOT": "assistant", "SYSTEM": "system", "USER": "user"}.get(
+                str(value.get("role", "USER")).upper()
+            )
+            if role is None or not isinstance(value.get("message"), str):
+                messages.append(
+                    {
+                        "role": "provider_native",
+                        "provider": "oci_genai",
+                        "kind": value.get("role", "unknown"),
+                        "value": value,
+                    }
+                )
+            else:
+                messages.append({"role": role, "content": value["message"]})
+        if "message" in chat:
+            if not isinstance(chat["message"], str):
+                raise _UnsupportedRequest("OCI current message must be text")
+            messages.append({"role": "user", "content": chat["message"]})
+    else:
+        raw_messages = chat.get("messages", [])
+        if not isinstance(raw_messages, list):
+            raise _UnsupportedRequest("OCI messages must be an array")
+        messages = [_generic_message(value) for value in raw_messages]
+    raw_tools = chat.get("tools")
+    tools = None
+    if raw_tools is not None:
+        if not isinstance(raw_tools, list):
+            raise _UnsupportedRequest("OCI tools must be an array")
+        tools = [
+            {"type": "provider_native", "provider": "oci_genai", "kind": value.get("type", "unknown"), "value": value}
+            for value in raw_tools
+            if isinstance(value, dict)
+        ]
+        if len(tools) != len(raw_tools):
+            raise _UnsupportedRequest("OCI tool must be an object")
+    payload = normalized_annotation(
+        chat,
+        messages=messages,
+        modeled_keys=modeled,
+        api_specific={"api": "oci_genai", "api_format": variant},
+        tools=tools,
+    )
+    if "chatRequest" in content and isinstance(content.get("servingMode"), dict):
+        payload["model"] = content["servingMode"].get("modelId", content["servingMode"].get("endpointId"))
+    return payload
+
+
+def response_calls(response: dict[str, Any]) -> tuple[ToolCall, ...]:
+    chat = response.get("chatResponse", response)
+    if not isinstance(chat, dict):
+        raise _UnsupportedRequest("OCI response is invalid")
+    variant = str(chat.get("apiFormat", "GENERIC")).upper()
+    calls = []
+    if variant == "COHERE":
+        for index, value in enumerate(chat.get("toolCalls") or []):
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OCI tool call is invalid")
+            calls.append(tool_call(value.get("id", f"call_{index}"), value.get("name"), value.get("parameters", {})))
+        return tuple(calls)
+    if variant == "GENERIC":
+        messages = [choice.get("message") for choice in chat.get("choices") or [] if isinstance(choice, dict)]
+    else:
+        messages = [chat.get("message")]
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        for value in message.get("toolCalls") or []:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OCI tool call is invalid")
+            function = value.get("function")
+            source = function if isinstance(function, dict) else value
+            calls.append(
+                tool_call(value.get("id", source.get("name")), source.get("name"), source.get("arguments", {}))
+            )
+    return tuple(calls)
+
+
 GENERIC_CHOICE_KEYS = frozenset(
     {"finishReason", "groundingMetadata", "index", "logprobs", "message", "serviceTier", "usage"}
 )
@@ -115,24 +302,6 @@ def response_candidate_payloads(response: dict[str, Any], max_segments: int) -> 
                 return tuple({**response, "choices": [choice]} for choice in choices)
             return tuple({**response, "chatResponse": {**chat_response, "choices": [choice]}} for choice in choices)
     return (response,)
-
-
-def expected_native_response_text(response: dict[str, Any], projected_text: str | None) -> str | None:
-    """Mirror the text exposed by Relay's OCI response codec."""
-
-    chat_response = response.get("chatResponse", response)
-    if isinstance(chat_response, dict):
-        api_format = str(chat_response.get("apiFormat", "GENERIC")).upper()
-        message: object = None
-        if api_format == "GENERIC" and isinstance(chat_response.get("choices"), list):
-            choices = chat_response["choices"]
-            if len(choices) == 1 and isinstance(choices[0], dict):
-                message = choices[0].get("message")
-        elif api_format == "COHEREV2":
-            message = chat_response.get("message")
-        if isinstance(message, dict) and isinstance(message.get("refusal"), str):
-            return None
-    return projected_text
 
 
 def _validate_oci_response_calls(calls: object, api_format: str) -> int:

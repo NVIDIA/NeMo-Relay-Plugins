@@ -117,7 +117,7 @@ def test_output_projection_covers_all_visible_text(
     response: dict[str, object],
     expected: str,
 ) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(payload, require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == expected
@@ -213,7 +213,7 @@ def test_output_projection_rejects_incomplete_coverage(
     payload: dict[str, object],
     response: dict[str, object],
 ) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(payload, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -247,7 +247,7 @@ def test_output_projection_rejects_unknown_response_siblings(protocol: str) -> N
         request, response = combined_protocol_case(protocol)
         allow_tool_calls = True
     response["futureExplanation"] = "UNCHECKED_CANARY"
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -263,7 +263,7 @@ def test_output_projection_rejects_unknown_choice_or_candidate_siblings(protocol
         response["candidates"][0]["futureExplanation"] = "UNCHECKED_CANARY"  # type: ignore[index]
     else:
         response["chatResponse"]["choices"][0]["futureExplanation"] = "UNCHECKED_CANARY"  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -290,7 +290,7 @@ def test_output_projection_rejects_known_unchecked_response_diagnostics(protocol
             "candidates": [{"content": {"role": "model", "parts": [{"text": "safe"}]}}],
             "promptFeedback": {"blockReasonMessage": "UNCHECKED_CANARY"},
         }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -298,7 +298,7 @@ def test_output_projection_rejects_known_unchecked_response_diagnostics(protocol
 
 
 def test_current_operational_response_metadata_remains_compatible() -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     chat_result = chat_response()
     chat_result.update({"metadata": {}, "moderation": None, "object": "chat.completion"})
@@ -410,7 +410,7 @@ def test_current_operational_response_metadata_remains_compatible() -> None:
 
 @pytest.mark.parametrize("text", ["", " "])
 def test_output_projection_preserves_empty_and_whitespace_text(text: str) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(chat_request(), require_user=True)
 
     assert projector.project_response_text(decoded, chat_response(text), allow_tool_calls=False) == text
@@ -477,7 +477,7 @@ def test_output_projection_includes_known_scalar_variants(
     response: dict[str, object],
     expected: str,
 ) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(payload, require_user=True)
 
     assert projector.project_response_text(decoded, response, allow_tool_calls=False) == expected
@@ -612,7 +612,7 @@ def test_output_projection_rejects_unchecked_nested_text_metadata(
     payload: dict[str, object],
     response: dict[str, object],
 ) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(payload, require_user=True)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -621,7 +621,7 @@ def test_output_projection_rejects_unchecked_nested_text_metadata(
 
 @pytest.mark.parametrize("api_format", ["GENERIC", "COHERE", "COHEREV2"])
 def test_oci_response_must_match_request_api_format(api_format: str) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     text_request = projector.project_text(oci_request(api_format), require_user=True)
     tool_request = projector.project_tools(oci_request(api_format), require_definitions=False)
     mismatched_response = {
@@ -638,16 +638,14 @@ def test_oci_response_must_match_request_api_format(api_format: str) -> None:
         projector.project_response_tools(tool_request, mismatched_response)
 
 
-def test_native_response_decoder_failures_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    projector = codec_projection._NativeCodecProjector()
+def test_provider_response_projection_failures_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(chat_request(), require_user=True, codec_name="openai_chat")
 
-    class BrokenCodec:
-        @staticmethod
-        def decode_response(_response: object) -> object:
-            raise RuntimeError("private provider content")
+    def unsupported_projection(*_args: object, **_kwargs: object) -> object:
+        raise codec_projection._UnsupportedRequest("unsupported")
 
-    monkeypatch.setitem(projector._codecs, "openai_chat", BrokenCodec())  # noqa: SLF001 - boundary regression
+    monkeypatch.setattr(codec_projection.openai_chat_adapter, "raw_response_texts", unsupported_projection)
     with pytest.raises(codec_projection._UnsupportedRequest, match="could not be completely decoded"):
         projector.project_response_text(
             decoded,
@@ -658,7 +656,7 @@ def test_native_response_decoder_failures_are_rejected(monkeypatch: pytest.Monke
 
 
 def test_projection_programming_errors_are_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(chat_request(), require_user=True, codec_name="openai_chat")
 
     def broken_projection(*_args: object, **_kwargs: object) -> object:
@@ -675,7 +673,7 @@ def test_projection_programming_errors_are_not_hidden(monkeypatch: pytest.Monkey
 
 
 def test_output_only_rejects_an_unchecked_tool_only_response() -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(chat_request(), require_user=True)
     response = chat_response(None)
     response["choices"][0]["message"]["tool_calls"] = [  # type: ignore[index]
@@ -705,7 +703,7 @@ def test_every_text_candidate_is_projected_independently(protocol: str) -> None:
                 {"content": {"role": "model", "parts": [{"text": "second"}]}},
             ]
         }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_text(request, require_user=True)
 
     assert projector.project_response_texts(

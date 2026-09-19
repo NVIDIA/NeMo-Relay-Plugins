@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 from provider_cases import (
@@ -95,7 +94,7 @@ def _oci_generic_request(messages: list[dict[str, object]], **chat_request: obje
 def test_projection_normalizes_every_builtin_provider_text_shape(payload: dict[str, object]) -> None:
     original = json.loads(json.dumps(payload))
 
-    assert codec_projection._NativeCodecProjector().project(payload) == [
+    assert codec_projection._ProviderProjector().project(payload) == [
         {"role": "system", "content": "policy"},
         {"role": "user", "content": "hello"},
     ]
@@ -114,7 +113,7 @@ def test_projection_preserves_order_tools_and_assistant_context_without_mutating
     )
     original = json.loads(json.dumps(request))
 
-    assert codec_projection._NativeCodecProjector().project(request) == request["content"]["messages"]
+    assert codec_projection._ProviderProjector().project(request) == request["content"]["messages"]
     assert request == original
 
 
@@ -132,7 +131,7 @@ def test_projection_maps_developer_to_system_and_joins_ordered_text_parts() -> N
         ]
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "system", "content": "policy"},
         {"role": "user", "content": "hello"},
     ]
@@ -203,7 +202,7 @@ def test_projection_maps_developer_to_system_and_joins_ordered_text_parts() -> N
 def test_projection_preserves_each_builtin_codec_multipart_text_order(
     payload: dict[str, object], expected: str
 ) -> None:
-    assert codec_projection._NativeCodecProjector().project(payload) == [{"role": "user", "content": expected}]
+    assert codec_projection._ProviderProjector().project(payload) == [{"role": "user", "content": expected}]
 
 
 def test_projection_includes_replayed_openai_responses_refusal_text() -> None:
@@ -221,7 +220,7 @@ def test_projection_includes_replayed_openai_responses_refusal_text() -> None:
         ]
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "declinedsafe alternative"},
         {"role": "user", "content": "follow-up"},
@@ -244,7 +243,7 @@ def test_projection_accepts_replayed_openai_responses_assistant_phase() -> None:
         ],
         tools=[{"type": "function", "name": "lookup", "parameters": {}}],
     )
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     assert projector.project(request) == [
         {"role": "user", "content": "first"},
@@ -270,7 +269,7 @@ def test_projection_rejects_unknown_openai_responses_assistant_phase(phase: obje
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 @pytest.mark.parametrize("api_format", ["GENERIC", "COHEREV2"])
@@ -296,7 +295,7 @@ def test_projection_accepts_empty_oci_assistant_response_metadata(api_format: st
         },
     }
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "answer"},
         {"role": "user", "content": "follow-up"},
@@ -313,7 +312,7 @@ def test_projection_accepts_systemless_anthropic_without_relying_on_headers() ->
         },
     }
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 def test_projection_accepts_anthropic_prompt_cache_metadata_without_treating_it_as_text() -> None:
@@ -339,7 +338,7 @@ def test_projection_accepts_anthropic_prompt_cache_metadata_without_treating_it_
         ],
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "system", "content": "policy"},
         {"role": "user", "content": "hello"},
     ]
@@ -366,7 +365,7 @@ def test_projection_accepts_systemless_anthropic_prompt_cache_without_headers() 
         },
     }
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 def test_projection_accepts_bare_oci_uppercase_roles_without_provider_hint() -> None:
@@ -377,7 +376,7 @@ def test_projection_accepts_bare_oci_uppercase_roles_without_provider_hint() -> 
         },
     }
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 def test_projection_accepts_relay_decodable_oci_text_parts_with_lowercase_roles() -> None:
@@ -388,7 +387,7 @@ def test_projection_accepts_relay_decodable_oci_text_parts_with_lowercase_roles(
         },
     }
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 @pytest.mark.parametrize("role", ["system", "user", "assistant"])
@@ -409,7 +408,36 @@ def test_projection_accepts_openai_chat_null_message_name(role: str) -> None:
         # Guardrails conversation-order boundary. Put it first for this case.
         request["content"]["messages"].reverse()
         expected.reverse()
-    assert codec_projection._NativeCodecProjector().project(request) == expected
+    assert codec_projection._ProviderProjector().project(request) == expected
+
+
+@pytest.mark.parametrize("role", ["developer", "system", "user"])
+def test_openai_chat_message_extensions_cannot_hide_prompt_text(role: str) -> None:
+    request = _request([{"role": role, "content": "hello", "future_prompt": "unchecked"}])
+
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        codec_projection._ProviderProjector().project(request)
+
+
+def test_openai_chat_tool_calls_are_rejected_on_non_assistant_messages() -> None:
+    request = _request(
+        [
+            {
+                "role": "user",
+                "content": "hello",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }
+                ],
+            }
+        ]
+    )
+
+    with pytest.raises(codec_projection._UnsupportedRequest):
+        codec_projection._ProviderProjector().project(request)
 
 
 def test_projection_accepts_validated_codex_responses_client_metadata() -> None:
@@ -418,7 +446,7 @@ def test_projection_accepts_validated_codex_responses_client_metadata() -> None:
         client_metadata={"x-codex-installation-id": "installation-fixture"},
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 @pytest.mark.parametrize(
@@ -435,7 +463,7 @@ def test_projection_rejects_unrecognized_responses_client_metadata(metadata: obj
     request = responses_request("hello", client_metadata=metadata)
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 def test_codex_responses_tool_result_remains_unsupported() -> None:
@@ -453,7 +481,7 @@ def test_codex_responses_tool_result_remains_unsupported() -> None:
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 @pytest.mark.parametrize("role", ["SYSTEM", "USER", "ASSISTANT"])
@@ -479,7 +507,7 @@ def test_oci_structural_fields_never_disappear_behind_text_projection(
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 @pytest.mark.parametrize(
@@ -499,7 +527,7 @@ def test_oci_structural_fields_never_disappear_behind_text_projection(
     ids=["openai-chat-specific-control", "anthropic-specific-control"],
 )
 def test_provider_specific_markers_select_one_complete_builtin_codec(payload: dict[str, object]) -> None:
-    assert codec_projection._NativeCodecProjector().project(payload) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(payload) == [{"role": "user", "content": "hello"}]
 
 
 def test_projection_accepts_relay_openai_chat_only_controls() -> None:
@@ -533,7 +561,7 @@ def test_projection_accepts_relay_openai_chat_only_controls() -> None:
     }
     request = _request([{"role": "user", "content": "hello"}], **controls)
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -543,7 +571,7 @@ def test_projection_accepts_nvidia_thinking_control_without_treating_it_as_promp
         chat_template_kwargs={"enable_thinking": enabled},
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 @pytest.mark.parametrize(
@@ -562,7 +590,7 @@ def test_projection_rejects_unreviewed_chat_template_controls(template_kwargs: o
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
 def test_projection_accepts_relay_anthropic_only_controls() -> None:
@@ -581,7 +609,7 @@ def test_projection_accepts_relay_anthropic_only_controls() -> None:
         },
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [
+    assert codec_projection._ProviderProjector().project(request) == [
         {"role": "system", "content": "policy"},
         {"role": "user", "content": "hello"},
     ]
@@ -595,13 +623,16 @@ def test_projection_rejects_mixed_openai_chat_and_anthropic_controls() -> None:
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="mixes OpenAI Chat and Anthropic"):
-        codec_projection._NativeCodecProjector().project(request)
+        codec_projection._ProviderProjector().project(request)
 
 
-def test_ambiguous_decoder_failure_fails_closed() -> None:
-    projector = codec_projection._NativeCodecProjector()
-    projector._codecs["anthropic_messages"] = MagicMock()
-    projector._codecs["anthropic_messages"].decode.side_effect = RuntimeError("simulated native decoder failure")
+def test_ambiguous_wire_projection_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    projector = codec_projection._ProviderProjector()
+    monkeypatch.setattr(
+        codec_projection.anthropic_adapter,
+        "request_annotation",
+        lambda _content: (_ for _ in ()).throw(codec_projection._UnsupportedRequest("unsupported")),
+    )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project(_request([{"role": "user", "content": "hello"}]))
@@ -729,7 +760,7 @@ def test_ambiguous_decoder_failure_fails_closed() -> None:
 )
 def test_projection_rejects_unsupported_shapes(payload: dict[str, object]) -> None:
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project(payload)
+        codec_projection._ProviderProjector().project(payload)
 
 
 def test_projection_accepts_assistant_context_after_the_latest_user() -> None:
@@ -741,7 +772,7 @@ def test_projection_accepts_assistant_context_after_the_latest_user() -> None:
         ]
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == request["content"]["messages"]
+    assert codec_projection._ProviderProjector().project(request) == request["content"]["messages"]
 
 
 def test_projection_accepts_empty_responses_context_management() -> None:
@@ -750,7 +781,7 @@ def test_projection_accepts_empty_responses_context_management() -> None:
         context_management=[],
     )
 
-    assert codec_projection._NativeCodecProjector().project(request) == [{"role": "user", "content": "hello"}]
+    assert codec_projection._ProviderProjector().project(request) == [{"role": "user", "content": "hello"}]
 
 
 _ECHO_LATEST_USER = object()

@@ -31,7 +31,7 @@ def test_anthropic_explicit_custom_tool_is_a_function_definition() -> None:
             "input_examples": [{"city": "Paris"}],
         }
     ]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(custom)
     calls = projector.project_response_tools(decoded, response)
@@ -52,7 +52,7 @@ def test_standard_anthropic_controls_are_opaque_at_the_normalized_wrapper() -> N
             "input_examples": [{"tool": "hammer", "city": "Paris"}],
         }
     )
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -72,7 +72,7 @@ def test_mixed_anthropic_function_and_hosted_calls_are_rejected() -> None:
             "input": {"query": "weather"},
         }
     )
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -85,7 +85,7 @@ def test_anthropic_tool_use_accepts_nullable_caller(location: str) -> None:
         request["content"]["messages"][1]["content"][0]["caller"] = None  # type: ignore[index]
     else:
         response["content"][0]["caller"] = None  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -102,7 +102,7 @@ def test_anthropic_tool_use_accepts_direct_caller(location: str) -> None:
         request["content"]["messages"][1]["content"][0]["caller"] = caller  # type: ignore[index]
     else:
         response["content"][0]["caller"] = caller  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -115,7 +115,7 @@ def test_anthropic_tool_use_accepts_direct_caller(location: str) -> None:
 def test_anthropic_tool_use_rejects_server_caller(location: str) -> None:
     request, response = anthropic_messages_case()
     caller = {"type": "code_execution_20260120", "tool_id": "srvtoolu_1"}
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     if location == "request":
         request["content"]["messages"][1]["content"][0]["caller"] = caller  # type: ignore[index]
         with pytest.raises(codec_projection._UnsupportedRequest):
@@ -134,7 +134,7 @@ def test_anthropic_tool_use_accepts_nullable_toolset_name(location: str) -> None
         request["content"]["messages"][1]["content"][0]["toolset_name"] = None  # type: ignore[index]
     else:
         response["content"][0]["toolset_name"] = None  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -156,7 +156,7 @@ def test_anthropic_tool_blocks_on_the_wrong_role_are_rejected(role: str, block: 
     broken["content"]["messages"] = [{"role": role, "content": [block]}]  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)
 
 
 async def test_headerless_anthropic_tool_history_without_definitions_is_unambiguous() -> None:
@@ -164,7 +164,7 @@ async def test_headerless_anthropic_tool_history_without_definitions_is_unambigu
     request["headers"] = {}
     request["content"].pop("tools")  # type: ignore[union-attr]
 
-    decoded = codec_projection._NativeCodecProjector().project_tools(request, require_definitions=False)
+    decoded = codec_projection._ProviderProjector().project_tools(request, require_definitions=False)
 
     assert decoded.codec_names == ("anthropic_messages",)
     assert decoded.projection.definitions == ()
@@ -190,7 +190,7 @@ def test_anthropic_tool_blocks_mixed_with_openai_tool_calls_are_rejected() -> No
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request, require_definitions=False)
+        codec_projection._ProviderProjector().project_tools(request, require_definitions=False)
 
 
 def test_anthropic_function_call_alias_cannot_hide_tool_traffic() -> None:
@@ -204,7 +204,7 @@ def test_anthropic_function_call_alias_cannot_hide_tool_traffic() -> None:
     ]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)
 
 
 def test_anthropic_empty_tool_result_can_omit_content_without_request_mutation() -> None:
@@ -212,7 +212,7 @@ def test_anthropic_empty_tool_result_can_omit_content_without_request_mutation()
     result = request["content"]["messages"][2]["content"][0]  # type: ignore[index]
     result.pop("content")  # type: ignore[union-attr]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert projection.exchanges[0].results[0].content is None
     assert "content" not in result
@@ -228,11 +228,11 @@ def test_anthropic_toolset_member_is_not_validated_as_an_unrelated_function(
     if location == "request":
         request["content"]["messages"][1]["content"][0]["toolset_name"] = toolset_name  # type: ignore[index]
         with pytest.raises(codec_projection._UnsupportedRequest):
-            codec_projection._NativeCodecProjector().project_tools(request)
+            codec_projection._ProviderProjector().project_tools(request)
         return
 
     response["content"][0]["toolset_name"] = toolset_name  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
 
@@ -242,7 +242,7 @@ def test_anthropic_context_editing_metadata_is_not_mistaken_for_a_call() -> None
     response["content"] = [{"type": "text", "text": "hello"}]
     response["stop_reason"] = "end_turn"
     response["context_management"] = {"applied_edits": [{"type": "clear_tool_uses_20250919", "cleared_tool_uses": 2}]}
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     assert projector.project_response_tools(projector.project_tools(request), response) == ()
 
@@ -266,7 +266,7 @@ def test_anthropic_extensions_cannot_hide_tool_traffic(target: str, extra: dict[
         messages[2]["content"][0].update(extra)  # type: ignore[index,union-attr]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_mixed_known_and_hosted_request_tool_blocks_are_rejected() -> None:
@@ -282,4 +282,4 @@ def test_mixed_known_and_hosted_request_tool_blocks_are_rejected() -> None:
     )
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)

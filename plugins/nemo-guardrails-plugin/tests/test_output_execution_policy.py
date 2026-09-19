@@ -205,7 +205,7 @@ async def test_output_message_limit_reserves_space_before_calling_the_provider()
     rails = _EchoRails()
     text_policy = execution_policy._TextRailsPolicy(rails, 1_000)
     policy = execution_policy._LlmExecutionPolicy(
-        codec_projection._NativeCodecProjector(),
+        codec_projection._ProviderProjector(),
         text_policy,
         input_enabled=False,
         output_enabled=True,
@@ -244,7 +244,7 @@ def _codec_execution_context(request_codec: str | None, response_codec: str | No
 
 
 async def test_authoritative_context_does_not_guess_an_absent_request_codec() -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(_EchoRails(), 1_000, projector=projector),
@@ -267,7 +267,7 @@ async def test_authoritative_context_does_not_guess_an_absent_request_codec() ->
 
 
 async def test_authoritative_context_requires_a_response_codec_for_output_rails() -> None:
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(_EchoRails(), 1_000, projector=projector),
@@ -300,7 +300,7 @@ async def test_execution_context_uses_independent_request_and_response_codecs_fo
                 return SimpleNamespace(status=RailStatus.MODIFIED, rail="output rail", content="rewritten")
             return SimpleNamespace(status=RailStatus.PASSED, rail=None, content=content)
 
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(DecisionRails(), 1_000, projector=projector),
@@ -377,7 +377,7 @@ async def test_execution_context_uses_independent_response_codec_for_structural_
         close=AsyncMock(),
     )
     execution = execution_policy._LlmExecutionPolicy(
-        codec_projection._NativeCodecProjector(),
+        codec_projection._ProviderProjector(),
         None,
         input_enabled=False,
         output_enabled=False,
@@ -410,7 +410,7 @@ async def test_execution_policy_checks_reasoning_before_final_answer() -> None:
             return SimpleNamespace(status=RailStatus.PASSED, rail=None, content=content)
 
     rails = RecordingRails()
-    projector = codec_projection._NativeCodecProjector(
+    projector = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.CHECK_OUTPUT)
     )
     text_policy = execution_policy._TextRailsPolicy(rails, 1_000, projector=projector)
@@ -447,7 +447,7 @@ async def test_execution_policy_bounds_the_number_of_output_checks_before_evalua
             return await super().check_async(messages, rail_types=rail_types)
 
     rails = RecordingRails()
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(rails, 1_000, projector=projector),
@@ -472,7 +472,7 @@ async def test_execution_policy_bounds_the_number_of_output_checks_before_evalua
 
 async def test_execution_policy_bounds_aggregate_repeated_output_context_work() -> None:
     rails = _EchoRails()
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(rails, 1_000, projector=projector),
@@ -501,7 +501,7 @@ async def test_execution_policy_applies_one_deadline_to_all_output_segments() ->
             await asyncio.sleep(0.06)
             return await super().check_async(messages, rail_types=rail_types)
 
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     execution = execution_policy._LlmExecutionPolicy(
         projector,
         execution_policy._TextRailsPolicy(SlowRails(), 80, projector=projector),

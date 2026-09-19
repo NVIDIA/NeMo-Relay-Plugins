@@ -25,7 +25,7 @@ manifest_root = "."
 artifact = "nemoguardrails_nemo_relay/worker.py"
 
 [integrity]
-sha256 = "sha256:bc8694143095b077d279b50f92c4e18caebde5cef36bd2556069c6c163480891"
+sha256 = "sha256:21aa1fce2a0c75f5f253403cc986358a86972c166ec2cb6bca963760a5e765f8"
 
 [load]
 runtime = "python"

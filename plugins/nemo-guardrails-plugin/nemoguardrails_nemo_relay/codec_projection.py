@@ -15,14 +15,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
-from nemo_relay import LLMRequest as NativeLlmRequest
-from nemo_relay.codecs import (
-    AnthropicMessagesCodec,
-    GeminiGenerateContentCodec,
-    OCIGenAIChatCodec,
-    OpenAIChatCodec,
-    OpenAIResponsesCodec,
-)
 from nemo_relay_plugin import AnnotatedLlmRequest, Json, LlmRequest
 
 from .codec_adapters import anthropic as anthropic_adapter
@@ -51,7 +43,6 @@ from .tool_projection import (
     ToolProjectionError,
     ToolRequestProjection,
     project_request_tools,
-    project_response_calls,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,8 +153,8 @@ def _validate_annotation_state(
         raise _UnsupportedRequest("normalized provider extras are invalid")
     if codec_name == "gemini_generate_content" and extra.get("cachedContent") is not None:
         raise _UnsupportedRequest("the request refers to provider-side cached content")
-    # ``extra`` is the native codec's lossless bucket for fields it does not
-    # understand. Even if a key looks harmless today, a custom or future
+    # ``extra`` is the normalized lossless bucket for fields the reviewed
+    # provider shape does not model. Even if a key looks harmless today, a future
     # provider codec could treat it as prompt content. Strict input coverage
     # therefore requires the bucket to be empty.
     if require_text_coverage:
@@ -479,15 +470,6 @@ _ANNOTATED_REQUEST_OPTIONAL_FIELDS = (
 _ANNOTATED_REQUEST_MODELED_FIELDS = frozenset({"messages", *_ANNOTATED_REQUEST_OPTIONAL_FIELDS})
 
 
-def _native_annotation_payload(annotated: Any) -> AnnotatedLlmRequest:
-    """Convert a native codec annotation to one stable JSON-shaped view."""
-
-    payload: dict[str, Any] = {"messages": annotated.messages}
-    payload.update({field: getattr(annotated, field) for field in _ANNOTATED_REQUEST_OPTIONAL_FIELDS})
-    payload["extra"] = annotated.extra
-    return cast(AnnotatedLlmRequest, payload)
-
-
 def _host_annotation_payload(annotated: AnnotatedLlmRequest) -> AnnotatedLlmRequest:
     """Undo serde's flattened ``extra`` field for an SDK JSON annotation."""
 
@@ -499,7 +481,7 @@ def _host_annotation_payload(annotated: AnnotatedLlmRequest) -> AnnotatedLlmRequ
 
 
 def _validate_raw_request_tool_shapes(codec_name: str, content: dict[str, Any]) -> None:
-    """Reject required structural fields that a native codec can default."""
+    """Reject required structural fields that provider normalization can default."""
 
     if codec_name == "openai_chat":
         openai_chat_adapter.validate_request_tool_shapes(content)
@@ -593,18 +575,11 @@ class _DecodedTextRequest:
     codec_variants: tuple[str | None, ...] = ()
 
 
-class _NativeCodecProjector:
-    """Reuse Relay's native codecs without trusting best-effort auto-detection."""
+class _ProviderProjector:
+    """Project reviewed provider wire formats without best-effort fallbacks."""
 
     def __init__(self, payload_policy: PayloadPolicy | None = None) -> None:
         self._payload_policy = payload_policy or PayloadPolicy()
-        self._codecs = {
-            "openai_chat": OpenAIChatCodec(),
-            "openai_responses": OpenAIResponsesCodec(),
-            "anthropic_messages": AnthropicMessagesCodec(),
-            "oci_genai": OCIGenAIChatCodec(),
-            "gemini_generate_content": GeminiGenerateContentCodec(),
-        }
 
     @staticmethod
     def _request_codec_variant(codec_name: str, content: dict[str, Any]) -> str | None:
@@ -688,7 +663,7 @@ class _NativeCodecProjector:
         codec_name: str | None = None,
         annotated_request: AnnotatedLlmRequest | None = None,
     ) -> list[tuple[str, AnnotatedLlmRequest]]:
-        if codec_name is not None and codec_name not in self._codecs:
+        if codec_name is not None and codec_name not in _PROVIDER_ADAPTERS:
             raise _UnsupportedRequest("Relay selected an unsupported request codec")
         candidates = (codec_name,) if codec_name is not None else self._candidate_codecs(request)
         decoded: list[tuple[str, AnnotatedLlmRequest]] = []
@@ -701,20 +676,13 @@ class _NativeCodecProjector:
                     allow_structural_tools=allow_structural_tools,
                     require_text_coverage=require_text_coverage,
                 )
-                native_content = request["content"]
+                provider_content = request["content"]
                 if codec_name == "anthropic_messages" and allow_structural_tools:
-                    native_content = anthropic_adapter.codec_content(native_content)
+                    provider_content = anthropic_adapter.codec_content(provider_content)
                 elif codec_name == "gemini_generate_content" and allow_structural_tools:
-                    native_content = gemini_adapter.codec_content(native_content)
-                native_request = NativeLlmRequest(request.get("headers", {}), native_content)
-                try:
-                    annotated = self._codecs[codec_name].decode(native_request)
-                    payload = _native_annotation_payload(annotated)
-                except Exception as exc:
-                    # Relay's native codec objects are an external boundary.
-                    # Normalize their failures, but let bugs in our own
-                    # projection and coverage code remain visible.
-                    raise _UnsupportedRequest("the provider codec could not decode the request") from exc
+                    provider_content = gemini_adapter.codec_content(provider_content)
+                adapter = _PROVIDER_ADAPTERS[codec_name]
+                payload = cast(AnnotatedLlmRequest, adapter.request_annotation(provider_content))
                 _validate_annotation_state(
                     payload,
                     codec_name,
@@ -727,9 +695,6 @@ class _NativeCodecProjector:
                         codec_name,
                         require_text_coverage=require_text_coverage,
                     )
-                    if host_payload != payload:
-                        raise _UnsupportedRequest("Relay's annotated request disagrees with its active codec")
-                    payload = host_payload
                 decoded.append((codec_name, payload))
             except _UnsupportedRequest as exc:
                 # Every selected codec is plausible at this point. Do not let
@@ -783,16 +748,26 @@ class _NativeCodecProjector:
             annotated_request=annotated_request,
         )
         for codec_name, annotated in decoded:
-            projections.append(
-                _project_annotated_request(
-                    annotated,
+            projection = _project_annotated_request(
+                annotated,
+                codec_name,
+                payload_policy=self._payload_policy,
+                allow_structural_tools=allow_structural_tools,
+                allow_tool_results=allow_tool_results,
+                require_user=require_user,
+            )
+            if annotated_request is not None:
+                host_projection = _project_annotated_request(
+                    _host_annotation_payload(annotated_request),
                     codec_name,
                     payload_policy=self._payload_policy,
                     allow_structural_tools=allow_structural_tools,
                     allow_tool_results=allow_tool_results,
                     require_user=require_user,
                 )
-            )
+                if host_projection != projection:
+                    raise _UnsupportedRequest("Relay's annotated request disagrees with its active codec")
+            projections.append(projection)
 
         if not projections or any(projection != projections[0] for projection in projections[1:]):
             raise _UnsupportedRequest("ambiguous provider codecs produced different text coverage")
@@ -823,15 +798,24 @@ class _NativeCodecProjector:
         )
         codec_variants = tuple(self._request_codec_variant(codec_name, request["content"]) for codec_name, _ in decoded)
         try:
-            projections = [
-                project_request_tools(
+            projections = []
+            for (codec_name, annotated), codec_variant in zip(decoded, codec_variants, strict=True):
+                projection = project_request_tools(
                     annotated,
                     codec_name=codec_name,
                     codec_variant=codec_variant,
                     include_definitions=require_definitions,
                 )
-                for (codec_name, annotated), codec_variant in zip(decoded, codec_variants, strict=True)
-            ]
+                if annotated_request is not None:
+                    host_projection = project_request_tools(
+                        _host_annotation_payload(annotated_request),
+                        codec_name=codec_name,
+                        codec_variant=codec_variant,
+                        include_definitions=require_definitions,
+                    )
+                    if host_projection != projection:
+                        raise ToolProjectionError("host annotation disagrees with provider payload")
+                projections.append(projection)
         except ToolProjectionError as exc:
             raise _UnsupportedRequest("provider tool traffic is not completely covered") from exc
         if not projections or any(projection != projections[0] for projection in projections[1:]):
@@ -841,54 +825,6 @@ class _NativeCodecProjector:
             projection=projections[0],
             codec_variants=codec_variants,
         )
-
-    @staticmethod
-    def _validate_response_annotation(codec_name: str, annotated: Any) -> dict[str, Any]:
-        payload = {
-            "message": annotated.message,
-            "tool_calls": annotated.tool_calls,
-            "api_specific": annotated.api_specific,
-            "extra": annotated.extra,
-        }
-        # Response codecs deliberately retain normal wire metadata such as
-        # OpenAI's ``object`` and ``created`` in ``extra``. Structural tool
-        # coverage comes from the provider-specific raw checks below, not from
-        # requiring unrelated response metadata to disappear.
-        if payload["extra"] is not None and not isinstance(payload["extra"], dict):
-            raise _UnsupportedRequest("provider response metadata is invalid")
-        api_specific = payload["api_specific"]
-        actual_api = api_specific.get("api") if isinstance(api_specific, dict) else None
-        if codec_name == "gemini_generate_content":
-            if actual_api not in {None, codec_name}:
-                raise _UnsupportedRequest("provider response does not match the request codec")
-        elif actual_api != codec_name:
-            raise _UnsupportedRequest("provider response does not match the request codec")
-        return payload
-
-    def _decode_response_annotation(
-        self,
-        codec_name: str,
-        response: dict[str, Any],
-    ) -> tuple[Any, dict[str, Any]]:
-        """Decode one response at the native-codec boundary."""
-
-        try:
-            annotated = self._codecs[codec_name].decode_response(response)
-            payload = self._validate_response_annotation(codec_name, annotated)
-        except _UnsupportedRequest:
-            raise
-        except Exception as exc:
-            raise _UnsupportedRequest("the provider codec could not decode the response") from exc
-        return annotated, payload
-
-    @staticmethod
-    def _normalized_response_text(annotated: Any) -> str | None:
-        """Read Relay's normalized response text without hiding local bugs."""
-
-        try:
-            return cast(str | None, annotated.response_text())
-        except Exception as exc:
-            raise _UnsupportedRequest("the provider codec could not expose response text") from exc
 
     @staticmethod
     def _raw_response_call_count(codec_name: str, response: dict[str, Any]) -> int:
@@ -931,19 +867,6 @@ class _NativeCodecProjector:
             return ProjectedOutputText(())
         raise _UnsupportedRequest("provider response has no completely covered visible text")
 
-    @staticmethod
-    def _expected_native_response_text(
-        codec_name: str,
-        response: dict[str, Any],
-        projected_text: str | None,
-    ) -> str | None:
-        """Mirror the text subset exposed by Relay's native response codec."""
-
-        adapter = _PROVIDER_ADAPTERS.get(codec_name)
-        if adapter is None:
-            raise _UnsupportedRequest("response codec is not supported")
-        return adapter.expected_native_response_text(response, projected_text)
-
     def project_response_texts(
         self,
         request: _DecodedTextRequest,
@@ -961,7 +884,6 @@ class _NativeCodecProjector:
         for codec_name, codec_variant in candidates:
             try:
                 self._validate_response_variant(codec_name, codec_variant, response)
-                annotated, _ = self._decode_response_annotation(codec_name, response)
                 projected = self._raw_response_texts(
                     codec_name,
                     response,
@@ -969,14 +891,6 @@ class _NativeCodecProjector:
                 )
                 if len(projected.candidates) + len(projected.reasoning) > MAX_RESPONSE_SEGMENTS:
                     raise _UnsupportedRequest("provider response has too many independently checked segments")
-                normalized_text = self._normalized_response_text(annotated)
-                first_text = projected.candidates[0] if projected.candidates else None
-                expected_native_text = self._expected_native_response_text(codec_name, response, first_text)
-                # Relay intentionally omits known refusal fields from some
-                # normalized responses. Compare against that exact subset
-                # while still sending every ordered visible segment to rails.
-                if normalized_text != expected_native_text:
-                    raise _UnsupportedRequest("provider response text coverage disagrees with its codec")
                 projections.append(
                     ProjectedOutputText(
                         projected.candidates,
@@ -1051,11 +965,8 @@ class _NativeCodecProjector:
                 raw_count = self._raw_response_call_count(codec_name, response)
                 candidate_projections: list[tuple[ToolCall, ...]] = []
                 for candidate_response in self._response_candidate_payloads(codec_name, response):
-                    _, payload = self._decode_response_annotation(codec_name, candidate_response)
-                    try:
-                        projected = project_response_calls(payload)
-                    except ToolProjectionError as exc:
-                        raise _UnsupportedRequest("provider response tool-call coverage is incomplete") from exc
+                    adapter = _PROVIDER_ADAPTERS[codec_name]
+                    projected = adapter.response_calls(candidate_response)
                     if self._raw_response_call_count(codec_name, candidate_response) != len(projected):
                         raise _UnsupportedRequest("provider response tool-call coverage is incomplete")
                     candidate_projections.append(projected)
@@ -1109,7 +1020,7 @@ class _NativeCodecProjector:
             raise _UnsupportedRequest("provider request codec identity is invalid")
         if response_codec_name is None:
             return tuple(zip(request.codec_names, variants, strict=True))
-        if response_codec_name not in self._codecs:
+        if response_codec_name not in _PROVIDER_ADAPTERS:
             raise _UnsupportedRequest("Relay selected an unsupported response codec")
         matching_variants = [
             variant

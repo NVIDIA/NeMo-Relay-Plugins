@@ -13,6 +13,7 @@ from ..payload_policy import (
     ReasoningPolicy,
     validate_anthropic_reasoning,
 )
+from ..structural_tools import ToolCall
 from .common import (
     RawResponseText,
     _reject_nonempty_metadata,
@@ -21,6 +22,8 @@ from .common import (
     _reject_unmodeled_structural_data,
     _structural_key,
     _UnsupportedRequest,
+    normalized_annotation,
+    tool_call,
 )
 
 ONLY_KEYS = frozenset(
@@ -55,17 +58,128 @@ RESPONSE_KEYS = frozenset(
     }
 )
 
+REQUEST_KEYS = frozenset(
+    {
+        "system",
+        "messages",
+        "model",
+        "max_tokens",
+        "temperature",
+        "top_p",
+        "stop_sequences",
+        "tools",
+        "tool_choice",
+        "metadata",
+        "service_tier",
+        "stream",
+        *ONLY_KEYS,
+    }
+)
+
+
+def _content(value: object) -> object:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        raise _UnsupportedRequest("Anthropic content must be text or an array")
+    parts: list[dict[str, Any]] = []
+    for value in value:
+        if not isinstance(value, dict):
+            raise _UnsupportedRequest("Anthropic content block must be an object")
+        kind = value.get("type")
+        if kind in {"text", "tool_result", "tool_use"}:
+            parts.append(dict(value))
+        elif kind == "image":
+            parts.append({"type": "image", "image": {k: v for k, v in value.items() if k != "type"}})
+        elif kind == "document":
+            parts.append({"type": "file", "file": {k: v for k, v in value.items() if k != "type"}})
+        else:
+            parts.append(
+                {"type": "provider_native", "provider": "anthropic_messages", "kind": kind or "unknown", "value": value}
+            )
+    return parts
+
+
+def request_annotation(content: dict[str, Any]) -> dict[str, Any]:
+    raw_messages = content.get("messages")
+    if not isinstance(raw_messages, list):
+        raise _UnsupportedRequest("Anthropic messages must be an array")
+    messages: list[dict[str, Any]] = []
+    for value in raw_messages:
+        if not isinstance(value, dict) or not isinstance(value.get("role"), str):
+            raise _UnsupportedRequest("Anthropic message is invalid")
+        role = value["role"]
+        if set(value) - {"content", "role"} or role not in {"assistant", "system", "user"}:
+            messages.append({"role": "provider_native", "provider": "anthropic_messages", "kind": role, "value": value})
+        else:
+            messages.append({"role": role, "content": _content(value.get("content"))})
+    instructions = content.get("system")
+    if instructions is not None:
+        instructions = _content(instructions)
+    raw_tools = content.get("tools")
+    tools = None
+    if raw_tools is not None:
+        if not isinstance(raw_tools, list):
+            raise _UnsupportedRequest("Anthropic tools must be an array")
+        tools = []
+        for value in raw_tools:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("Anthropic tool must be an object")
+            if value.get("type") in (None, "custom"):
+                if value.get("type") == "custom":
+                    tools.append(
+                        {"type": "provider_native", "provider": "anthropic_messages", "kind": "custom", "value": value}
+                    )
+                else:
+                    function = {"name": value.get("name")}
+                    if "input_schema" in value:
+                        function["parameters"] = value["input_schema"]
+                    if "description" in value:
+                        function["description"] = value["description"]
+                    if "strict" in value:
+                        function["strict"] = value["strict"]
+                    tools.append(
+                        {
+                            "type": "function",
+                            "function": function,
+                            **{
+                                key: item
+                                for key, item in value.items()
+                                if key not in {"description", "input_schema", "name", "strict", "type"}
+                            },
+                        }
+                    )
+            else:
+                tools.append(
+                    {
+                        "type": "provider_native",
+                        "provider": "anthropic_messages",
+                        "kind": value.get("type", "unknown"),
+                        "value": value,
+                    }
+                )
+    return normalized_annotation(
+        content,
+        messages=messages,
+        modeled_keys=REQUEST_KEYS,
+        api_specific={"api": "anthropic_messages", "container": content.get("container")},
+        instructions=instructions,
+        tools=tools,
+    )
+
+
+def response_calls(response: dict[str, Any]) -> tuple[ToolCall, ...]:
+    calls: list[ToolCall] = []
+    for value in response.get("content") or []:
+        if isinstance(value, dict) and value.get("type") == "tool_use":
+            calls.append(tool_call(value.get("id"), value.get("name"), value.get("input", {})))
+    return tuple(calls)
+
 
 def response_candidate_payloads(response: dict[str, Any], _max_segments: int) -> tuple[dict[str, Any], ...]:
     """Anthropic exposes one response candidate per Messages envelope."""
 
     return (response,)
-
-
-def expected_native_response_text(_response: dict[str, Any], projected_text: str | None) -> str | None:
-    """Relay's Anthropic codec exposes the projected visible text."""
-
-    return projected_text
 
 
 def has_cache_control(messages: list[Any]) -> bool:

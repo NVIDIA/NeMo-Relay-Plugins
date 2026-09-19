@@ -11,6 +11,8 @@ from collections.abc import Set
 from dataclasses import dataclass
 from typing import Any
 
+from ..structural_tools import ToolCall
+
 
 class _UnsupportedRequest(ValueError):
     """Indicate that a provider payload cannot be inspected completely."""
@@ -24,6 +26,50 @@ class RawResponseText:
     fragments: tuple[str, ...] = ()
     reasoning: tuple[str, ...] = ()
     fragment_separator: str = "\n"
+
+
+def normalized_annotation(
+    content: dict[str, Any],
+    *,
+    messages: list[dict[str, Any]],
+    modeled_keys: Set[str],
+    api_specific: dict[str, Any] | None,
+    instructions: Any = None,
+    tools: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the small normalized view consumed by the policy projector."""
+
+    model = content.get("model")
+    if model is not None and not isinstance(model, str):
+        raise _UnsupportedRequest("provider model must be a string")
+    return {
+        "messages": messages,
+        "instructions": instructions,
+        "model": model,
+        "previous_response_id": content.get("previous_response_id"),
+        "tools": tools,
+        "api_specific": api_specific,
+        "extra": {key: value for key, value in content.items() if key not in modeled_keys},
+    }
+
+
+def tool_call(call_id: object, name: object, arguments: object) -> ToolCall:
+    """Normalize a validated provider function call."""
+
+    if not isinstance(call_id, str) or not call_id or not isinstance(name, str) or not name:
+        raise _UnsupportedRequest("provider response tool call is incomplete")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(
+                arguments,
+                parse_constant=_reject_non_json_constant,
+                object_pairs_hook=_reject_duplicate_json_keys,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _UnsupportedRequest("provider response tool arguments are invalid") from exc
+    if not isinstance(arguments, dict):
+        raise _UnsupportedRequest("provider response tool arguments must be an object")
+    return ToolCall(call_id=call_id, name=name, arguments=arguments)
 
 
 def _required_json_object_text(value: object, field: str) -> None:

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..payload_policy import MultimodalPolicy, PayloadPolicy, ReasoningPolicy
+from ..structural_tools import ToolCall
 from .common import (
     RawResponseText,
     _reject_nonempty_metadata,
@@ -15,6 +16,8 @@ from .common import (
     _reject_unmodeled_fields,
     _reject_unmodeled_structural_data,
     _UnsupportedRequest,
+    normalized_annotation,
+    tool_call,
 )
 from .openai_common import validate_function_call
 
@@ -69,6 +72,139 @@ RESPONSE_KEYS = frozenset(
 )
 
 CHOICE_KEYS = frozenset({"finish_reason", "index", "logprobs", "message"})
+
+REQUEST_KEYS = frozenset(
+    {
+        "messages",
+        "model",
+        "temperature",
+        "max_tokens",
+        "max_completion_tokens",
+        "top_p",
+        "stop",
+        "tools",
+        "tool_choice",
+        "store",
+        "user",
+        "metadata",
+        "service_tier",
+        "parallel_tool_calls",
+        "top_logprobs",
+        "stream",
+        *ONLY_KEYS,
+    }
+)
+
+
+def _content(value: object) -> object:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        raise _UnsupportedRequest("OpenAI Chat message content must be text or an array")
+    normalized: list[dict[str, Any]] = []
+    for value in value:
+        if not isinstance(value, dict):
+            raise _UnsupportedRequest("OpenAI Chat content part must be an object")
+        kind = value.get("type")
+        if kind == "text":
+            if not isinstance(value.get("text"), str):
+                raise _UnsupportedRequest("OpenAI Chat text part is invalid")
+            normalized.append(dict(value))
+        elif kind == "image_url" and isinstance(value.get("image_url"), dict):
+            normalized.append(
+                {
+                    "type": "image_url",
+                    "image_url": value["image_url"],
+                    **{key: item for key, item in value.items() if key not in {"image_url", "type"}},
+                }
+            )
+        elif kind == "input_audio" and isinstance(value.get("input_audio"), dict):
+            normalized.append(
+                {
+                    "type": "audio",
+                    "audio": value["input_audio"],
+                    **{key: item for key, item in value.items() if key not in {"input_audio", "type"}},
+                }
+            )
+        elif kind == "file" and isinstance(value.get("file"), dict):
+            normalized.append(
+                {
+                    "type": "file",
+                    "file": value["file"],
+                    **{key: item for key, item in value.items() if key not in {"file", "type"}},
+                }
+            )
+        else:
+            normalized.append(
+                {"type": "provider_native", "provider": "openai_chat", "kind": kind or "unknown", "value": value}
+            )
+    return normalized
+
+
+def request_annotation(content: dict[str, Any]) -> dict[str, Any]:
+    raw_messages = content.get("messages")
+    if not isinstance(raw_messages, list):
+        raise _UnsupportedRequest("OpenAI Chat messages must be an array")
+    messages: list[dict[str, Any]] = []
+    for value in raw_messages:
+        if not isinstance(value, dict) or not isinstance(value.get("role"), str):
+            raise _UnsupportedRequest("OpenAI Chat message is invalid")
+        role = value["role"]
+        if role == "assistant" and set(value) - {"content", "name", "role", "tool_calls"}:
+            messages.append({"role": "provider_native", "provider": "openai_chat", "kind": "assistant", "value": value})
+            continue
+        if role not in {"assistant", "developer", "system", "tool", "user"}:
+            raise _UnsupportedRequest("OpenAI Chat message role is unsupported")
+        if role == "assistant":
+            allowed_message_keys = {"content", "name", "role", "tool_calls"}
+        elif role == "tool":
+            allowed_message_keys = {"content", "name", "role", "tool_call_id"}
+        else:
+            allowed_message_keys = {"content", "name", "role"}
+        if set(value) - allowed_message_keys:
+            raise _UnsupportedRequest("OpenAI Chat message contains unmodeled fields")
+        message = dict(value)
+        if "content" in message and message["content"] is not None:
+            message["content"] = _content(message["content"])
+        if message.get("name") is None:
+            message.pop("name", None)
+        messages.append(message)
+    raw_tools = content.get("tools")
+    tools = None
+    if raw_tools is not None:
+        if not isinstance(raw_tools, list):
+            raise _UnsupportedRequest("OpenAI Chat tools must be an array")
+        tools = []
+        for value in raw_tools:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OpenAI Chat tool must be an object")
+            tools.append(
+                value
+                if value.get("type") == "function"
+                else {
+                    "type": "provider_native",
+                    "provider": "openai_chat",
+                    "kind": value.get("type", "unknown"),
+                    "value": value,
+                }
+            )
+    return normalized_annotation(
+        content,
+        messages=messages,
+        modeled_keys=REQUEST_KEYS,
+        api_specific={"api": "openai_chat"},
+        tools=tools,
+    )
+
+
+def response_calls(response: dict[str, Any]) -> tuple[ToolCall, ...]:
+    calls: list[ToolCall] = []
+    for choice in response.get("choices", []):
+        message = choice.get("message", {}) if isinstance(choice, dict) else {}
+        for value in message.get("tool_calls") or []:
+            function = value.get("function", {}) if isinstance(value, dict) else {}
+            calls.append(tool_call(value.get("id"), function.get("name"), function.get("arguments", {})))
+    return tuple(calls)
 
 
 def has_message_marker(messages: list[Any]) -> bool:
@@ -138,17 +274,6 @@ def response_candidate_payloads(response: dict[str, Any], max_segments: int) -> 
             raise _UnsupportedRequest("OpenAI Chat response has too many choices")
         return tuple({**response, "choices": [choice]} for choice in choices)
     return (response,)
-
-
-def expected_native_response_text(response: dict[str, Any], projected_text: str | None) -> str | None:
-    """Mirror the text exposed by Relay's OpenAI Chat response codec."""
-
-    choices = response.get("choices")
-    if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict):
-        message = choices[0].get("message")
-        if isinstance(message, dict) and isinstance(message.get("refusal"), str):
-            return None
-    return projected_text
 
 
 def raw_response_call_count(response: dict[str, Any]) -> int:

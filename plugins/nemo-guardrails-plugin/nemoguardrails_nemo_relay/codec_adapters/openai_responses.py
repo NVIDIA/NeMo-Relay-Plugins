@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from ..payload_policy import PayloadPolicy, ReasoningPolicy, validate_openai_responses_reasoning
+from ..structural_tools import ToolCall
 from .common import (
     RawResponseText,
     _reject_nonempty_metadata,
@@ -15,6 +16,8 @@ from .common import (
     _reject_unmodeled_fields,
     _reject_unmodeled_structural_data,
     _UnsupportedRequest,
+    normalized_annotation,
+    tool_call,
 )
 from .openai_common import validate_function_call
 
@@ -65,36 +68,200 @@ RESPONSE_KEYS = frozenset(
     }
 )
 
+REQUEST_KEYS = frozenset(
+    {
+        "input",
+        "instructions",
+        "model",
+        "max_output_tokens",
+        "temperature",
+        "top_p",
+        "tools",
+        "tool_choice",
+        "store",
+        "previous_response_id",
+        "truncation",
+        "reasoning",
+        "include",
+        "user",
+        "metadata",
+        "service_tier",
+        "parallel_tool_calls",
+        "max_tool_calls",
+        "top_logprobs",
+        "stream",
+        "background",
+        "context_management",
+        "conversation",
+        "moderation",
+        "prompt",
+        "prompt_cache_key",
+        "prompt_cache_options",
+        "prompt_cache_retention",
+        "safety_identifier",
+        "stream_options",
+        "text",
+    }
+)
+
+
+def _content(value: object) -> object:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        raise _UnsupportedRequest("OpenAI Responses content must be text or an array")
+    parts: list[dict[str, Any]] = []
+    for value in value:
+        if not isinstance(value, dict):
+            raise _UnsupportedRequest("OpenAI Responses content part must be an object")
+        kind = value.get("type")
+        if kind in {"input_text", "output_text"} and isinstance(value.get("text"), str):
+            parts.append(
+                {"type": "text", "text": value["text"], **{k: v for k, v in value.items() if k not in {"type", "text"}}}
+            )
+        elif kind == "refusal" and isinstance(value.get("refusal"), str):
+            parts.append(dict(value))
+        elif kind == "input_image":
+            image = {key: value[key] for key in ("detail", "file_id", "image_url") if key in value}
+            parts.append(
+                {
+                    "type": "image",
+                    "image": image,
+                    **{
+                        key: item
+                        for key, item in value.items()
+                        if key not in {"detail", "file_id", "image_url", "type"}
+                    },
+                }
+            )
+        elif kind == "input_file":
+            file = {key: value[key] for key in ("file_data", "file_id", "file_url", "filename") if key in value}
+            parts.append(
+                {
+                    "type": "file",
+                    "file": file,
+                    **{
+                        key: item
+                        for key, item in value.items()
+                        if key not in {"file_data", "file_id", "file_url", "filename", "type"}
+                    },
+                }
+            )
+        else:
+            parts.append(
+                {"type": "provider_native", "provider": "openai_responses", "kind": kind or "unknown", "value": value}
+            )
+    return parts
+
+
+def request_annotation(content: dict[str, Any]) -> dict[str, Any]:
+    raw_input = content.get("input")
+    if isinstance(raw_input, str):
+        messages: list[dict[str, Any]] = [{"role": "user", "content": raw_input}]
+    elif isinstance(raw_input, list):
+        messages = []
+        for value in raw_input:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OpenAI Responses input item must be an object")
+            role = value.get("role")
+            if isinstance(role, str):
+                if set(value) - {"content", "role", "type"}:
+                    messages.append(
+                        {"role": "provider_native", "provider": "openai_responses", "kind": "message", "value": value}
+                    )
+                elif role in {"assistant", "developer", "system", "user"}:
+                    messages.append({"role": role, "content": _content(value.get("content"))})
+                else:
+                    messages.append(
+                        {"role": "provider_native", "provider": "openai_responses", "kind": "message", "value": value}
+                    )
+            elif value.get("type") == "function_call":
+                call = tool_call(value.get("call_id"), value.get("name"), value.get("arguments", {}))
+                messages.append(
+                    {
+                        "role": "tool_call",
+                        "call_id": call.call_id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                )
+            elif value.get("type") == "function_call_output":
+                messages.append(
+                    {
+                        "role": "tool_result",
+                        "call_id": value.get("call_id"),
+                        "output": value.get("output"),
+                    }
+                )
+            else:
+                messages.append(
+                    {
+                        "role": "provider_native",
+                        "provider": "openai_responses",
+                        "kind": value.get("type", "unknown"),
+                        "value": value,
+                    }
+                )
+    else:
+        raise _UnsupportedRequest("OpenAI Responses input must be text or an array")
+    instructions = content.get("instructions")
+    if instructions is not None and not isinstance(instructions, str):
+        raise _UnsupportedRequest("OpenAI Responses instructions must be text")
+    raw_tools = content.get("tools")
+    tools = None
+    if raw_tools is not None:
+        if not isinstance(raw_tools, list):
+            raise _UnsupportedRequest("OpenAI Responses tools must be an array")
+        tools = []
+        for value in raw_tools:
+            if not isinstance(value, dict):
+                raise _UnsupportedRequest("OpenAI Responses tool must be an object")
+            if value.get("type") == "function":
+                function = value.get("function")
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": function
+                        if isinstance(function, dict)
+                        else {k: v for k, v in value.items() if k != "type"},
+                    }
+                )
+            else:
+                tools.append(
+                    {
+                        "type": "provider_native",
+                        "provider": "openai_responses",
+                        "kind": value.get("type", "unknown"),
+                        "value": value,
+                    }
+                )
+    return normalized_annotation(
+        content,
+        messages=messages,
+        modeled_keys=REQUEST_KEYS,
+        api_specific={
+            "api": "openai_responses",
+            "context_management": content.get("context_management"),
+            "conversation": content.get("conversation"),
+            "prompt": content.get("prompt"),
+        },
+        instructions=instructions,
+        tools=tools,
+    )
+
+
+def response_calls(response: dict[str, Any]) -> tuple[ToolCall, ...]:
+    calls: list[ToolCall] = []
+    for value in response.get("output") or []:
+        if isinstance(value, dict) and value.get("type") == "function_call":
+            calls.append(tool_call(value.get("call_id"), value.get("name"), value.get("arguments", {})))
+    return tuple(calls)
+
 
 def response_candidate_payloads(response: dict[str, Any], _max_segments: int) -> tuple[dict[str, Any], ...]:
     """Responses exposes one aggregate response envelope to Relay's codec."""
 
     return (response,)
-
-
-def expected_native_response_text(response: dict[str, Any], _projected_text: str | None) -> str | None:
-    """Mirror the aggregate text exposed by Relay's Responses codec."""
-
-    output_texts: list[str] = []
-    output = response.get("output")
-    if isinstance(output, list):
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") == "output_text" and isinstance(item.get("text"), str):
-                output_texts.append(cast(str, item["text"]))
-            elif item.get("type") == "message" and isinstance(item.get("content"), list):
-                output_texts.extend(
-                    cast(str, block["text"])
-                    for block in item["content"]
-                    if isinstance(block, dict)
-                    and block.get("type") == "output_text"
-                    and isinstance(block.get("text"), str)
-                )
-    if output_texts:
-        return "\n".join(output_texts)
-    aggregate = response.get("output_text")
-    return aggregate if isinstance(aggregate, str) and aggregate else None
 
 
 def validate_raw_coverage(content: dict[str, Any]) -> None:

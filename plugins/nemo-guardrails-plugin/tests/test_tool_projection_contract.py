@@ -23,7 +23,7 @@ from nemoguardrails_nemo_relay.structural_tools import ToolVerdictKind
 @pytest.mark.parametrize("protocol", PROTOCOLS)
 def test_all_relay_codecs_project_the_same_structural_contract(protocol: str) -> None:
     request, response = protocol_case(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -41,7 +41,7 @@ def test_all_relay_codecs_project_the_same_structural_contract(protocol: str) ->
 @pytest.mark.parametrize("protocol", PROTOCOLS)
 async def test_all_relay_codec_projections_pass_public_guardrails_checks(protocol: str) -> None:
     request, response = protocol_case(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
     calls = projector.project_response_tools(decoded, response)
@@ -54,7 +54,7 @@ async def test_all_relay_codec_projections_pass_public_guardrails_checks(protoco
 def test_all_relay_codecs_cover_mixed_text_and_function_call_outputs(protocol: str) -> None:
     request, response = protocol_case(protocol)
     response = response_with_text(protocol, response, "safe output")
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     text_request = projector.project_text(
         request,
@@ -93,7 +93,7 @@ def test_response_function_calls_require_the_provider_assistant_role(
         broken["chatResponse"]["choices"][0]["message"]["role"] = invalid_role  # type: ignore[index]
     else:  # pragma: no cover - the parameter list is the protocol catalog
         raise AssertionError(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)
@@ -115,7 +115,7 @@ def test_openai_and_anthropic_ambiguous_text_request_is_resolved_by_response() -
             }
         ]
     }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     decoded = projector.project_tools(request)
 
@@ -151,7 +151,7 @@ def test_empty_provider_candidates_do_not_create_false_tool_calls(
     response: dict[str, object],
 ) -> None:
     request, _ = protocol_case(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     assert projector.project_response_tools(projector.project_tools(request), response) == ()
 
@@ -164,7 +164,7 @@ def test_nested_unknown_request_extension_cannot_hide_tool_traffic(protocol: str
     target["extensions"] = {"mcp_call": {"name": "hidden"}}  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("protocol", ["openai_responses", "anthropic_messages", "oci_genai"])
@@ -180,13 +180,13 @@ def test_unknown_provider_item_cannot_hide_nested_tool_traffic(protocol: str) ->
         broken["content"]["chatRequest"]["messages"][0]["content"].append(hidden)  # type: ignore[index,union-attr]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(broken)
+        codec_projection._ProviderProjector().project_tools(broken)
 
 
 @pytest.mark.parametrize("protocol", ["openai_chat", "gemini_generate_content", "oci_genai"])
 def test_multiple_output_candidates_are_rejected(protocol: str) -> None:
     request, response = protocol_case(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_tools(request)
     broken = deepcopy(response)
     if protocol == "openai_chat":
@@ -204,7 +204,7 @@ def test_multiple_output_candidates_are_rejected(protocol: str) -> None:
 @pytest.mark.parametrize("protocol", ["openai_chat", "gemini_generate_content", "oci_genai"])
 def test_multiple_tool_candidates_are_projected_independently(protocol: str) -> None:
     request, response = protocol_case(protocol)
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
     decoded = projector.project_tools(request)
     multiple = deepcopy(response)
     if protocol == "openai_chat":
@@ -234,7 +234,7 @@ def test_provider_invalid_scalar_or_object_tool_result_is_not_stringified(
         request["content"]["messages"][2]["content"][0]["content"] = content  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 @pytest.mark.parametrize("protocol", ["openai_chat", "openai_responses"])
@@ -247,7 +247,7 @@ def test_duplicate_json_argument_keys_are_rejected(protocol: str) -> None:
     else:
         request["content"]["input"][1]["arguments"] = duplicate  # type: ignore[index]
         response["output"][0]["arguments"] = duplicate  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_tools(request)
@@ -271,7 +271,7 @@ def test_empty_tool_descriptions_remain_valid(protocol: str) -> None:
     else:
         content["tools"][0]["description"] = ""  # type: ignore[index]
 
-    projection = codec_projection._NativeCodecProjector().project_tools(request).projection
+    projection = codec_projection._ProviderProjector().project_tools(request).projection
 
     assert projection.definitions[0].description == ""
 
@@ -296,7 +296,7 @@ def test_provider_specific_definition_controls_are_not_accepted_cross_codec(prot
     definition[field] = {"properties": {"tool": {"type": "string"}}}  # type: ignore[index]
 
     with pytest.raises(codec_projection._UnsupportedRequest, match="tool traffic is not completely covered"):
-        codec_projection._NativeCodecProjector().project_tools(request)
+        codec_projection._ProviderProjector().project_tools(request)
 
 
 def test_unmodeled_provider_controls_still_require_complete_text_coverage() -> None:
@@ -306,7 +306,7 @@ def test_unmodeled_provider_controls_still_require_complete_text_coverage() -> N
     ]
     oci, _ = oci_cohere_v2_case()
     oci["content"]["chatRequest"]["citationOptions"] = {"mode": "FAST"}  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     assert projector.project_tools(oci).projection.definitions[0].name == "weather"
     with pytest.raises(codec_projection._UnsupportedRequest):
@@ -326,7 +326,7 @@ def test_empty_provider_result_cannot_hide_a_mixed_protocol_call(protocol: str) 
             "chatResponse": {"apiFormat": "GENERIC", "choices": []},
             "output": [{"type": "function_call", "call_id": "hidden"}],
         }
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), response)
@@ -345,7 +345,7 @@ def test_tool_finish_reason_without_a_projected_call_is_rejected(protocol: str) 
     else:
         broken["chatResponse"]["choices"][0]["message"].pop("toolCalls")  # type: ignore[index,union-attr]
         broken["chatResponse"]["choices"][0]["finishReason"] = "TOOL_CALL"  # type: ignore[index]
-    projector = codec_projection._NativeCodecProjector()
+    projector = codec_projection._ProviderProjector()
 
     with pytest.raises(codec_projection._UnsupportedRequest):
         projector.project_response_tools(projector.project_tools(request), broken)

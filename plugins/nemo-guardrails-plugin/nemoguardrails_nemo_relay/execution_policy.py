@@ -30,7 +30,7 @@ from .codec_projection import (  # noqa: E402
     MAX_RESPONSE_SEGMENTS,
     _DecodedTextRequest,
     _DecodedToolRequest,
-    _NativeCodecProjector,
+    _ProviderProjector,
     _UnsupportedRequest,
 )
 from .execution_context import (  # noqa: E402
@@ -110,7 +110,7 @@ class _TextRailsPolicy:
         timeout_ms: int,
         *,
         backend: CheckBackend | None = None,
-        projector: _NativeCodecProjector | None = None,
+        projector: _ProviderProjector | None = None,
         allow_structural_tools: bool = False,
         allow_tool_results: bool = False,
     ) -> None:
@@ -120,7 +120,7 @@ class _TextRailsPolicy:
                 raise ValueError("a local Guardrails engine or check backend is required")
             backend = LocalCheckBackend(rails, RailType)
         self._backend = backend
-        self._projector = projector or _NativeCodecProjector()
+        self._projector = projector or _ProviderProjector()
         self._allow_structural_tools = allow_structural_tools
         self._allow_tool_results = allow_tool_results
         self._timeout_seconds = timeout_ms / 1000
@@ -341,7 +341,7 @@ class _LlmExecutionPolicy:
 
     def __init__(
         self,
-        projector: _NativeCodecProjector,
+        projector: _ProviderProjector,
         text_policy: _TextRailsPolicy | None,
         *,
         input_enabled: bool,

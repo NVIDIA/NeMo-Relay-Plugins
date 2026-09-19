@@ -94,7 +94,7 @@ def test_project_dependency_bounds_match_the_design() -> None:
     assert release["version"] == project["version"]
     assert release["relay"]["sha"] == "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"
     assert manifest["compat"]["relay"] == ">=0.9.0,<1.0"
-    assert "nemo-relay==0.9.0" in project["dependencies"]
+    assert not any(dependency.startswith("nemo-relay==") for dependency in project["dependencies"])
     assert "nemo-relay-plugin==0.9.0" in project["dependencies"]
     assert "nemoguardrails==0.24.1" in project["dependencies"]
 
@@ -105,7 +105,7 @@ def test_base_runtime_is_pinned_without_optional_profiles() -> None:
 
     assert "optional-dependencies" not in project["project"]
     assert "httpx==0.28.1" in dependencies
-    assert "nemo-relay==0.9.0" in dependencies
+    assert not any(dependency.startswith("nemo-relay==") for dependency in dependencies)
     assert "nemo-relay-plugin==0.9.0" in dependencies
     assert "nemoguardrails==0.24.1" in dependencies
     assert not any(
@@ -158,6 +158,7 @@ def test_runtime_lock_excludes_unsupported_optional_integrations() -> None:
         "guardrails-ai",
         "guardrails-ai-regex-match",
         "langchain-anthropic",
+        "nemo-relay",
         "presidio-analyzer",
         "presidio-anonymizer",
         "torch",

@@ -12,7 +12,7 @@ import pytest
 from nemo_relay_plugin import PluginContext
 
 from nemoguardrails_nemo_relay import execution_policy, worker
-from nemoguardrails_nemo_relay.codec_projection import _NativeCodecProjector, _UnsupportedRequest
+from nemoguardrails_nemo_relay.codec_projection import _ProviderProjector, _UnsupportedRequest
 from nemoguardrails_nemo_relay.execution_context import (
     ExecutionCodecContextError,
     execution_codec_context,
@@ -47,10 +47,30 @@ def _chat_request() -> dict[str, object]:
     }
 
 
-def _host_annotation(annotation: dict[str, object]) -> dict[str, object]:
-    value = {key: item for key, item in annotation.items() if key != "extra" and item is not None}
-    value.update(annotation["extra"])  # type: ignore[arg-type]
-    return value
+_HOST_ANNOTATIONS: dict[str, dict[str, object]] = {
+    "openai_chat": {
+        "api_specific": {"api": "openai_chat"},
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "fixture",
+    },
+    "openai_responses": {
+        "api_specific": {"api": "openai_responses"},
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "fixture",
+    },
+    "anthropic_messages": {
+        "api_specific": {"api": "anthropic_messages"},
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "fixture",
+    },
+    "gemini_generate_content": {
+        "messages": [{"role": "user", "content": "hello"}],
+    },
+    "oci_genai": {
+        "api_specific": {"api": "oci_genai", "api_format": "GENERIC"},
+        "messages": [{"role": "user", "content": "hello"}],
+    },
+}
 
 
 def test_context_accepts_all_relay_builtin_codecs_and_legacy_hosts() -> None:
@@ -137,19 +157,12 @@ def test_context_rejects_malformed_identities(context: SimpleNamespace) -> None:
         ),
     ],
 )
-def test_authoritative_codec_and_annotation_must_agree_with_native_payload(
+def test_authoritative_codec_and_annotation_must_agree_on_policy_inputs(
     codec_name: str,
     native_request: dict[str, object],
 ) -> None:
-    projector = _NativeCodecProjector()
-    annotation = projector._decode_request(  # noqa: SLF001 - contract-level verification
-        native_request,
-        allow_structural_tools=False,
-        require_text_coverage=True,
-        codec_name=codec_name,
-    )[0][1]
-
-    host_annotation = _host_annotation(annotation)
+    projector = _ProviderProjector()
+    host_annotation = deepcopy(_HOST_ANNOTATIONS[codec_name])
     projected = projector.project_text(
         native_request,
         require_user=True,
@@ -160,8 +173,8 @@ def test_authoritative_codec_and_annotation_must_agree_with_native_payload(
     assert projected.messages[-1] == {"role": "user", "content": "hello"}
 
     stale = deepcopy(host_annotation)
-    stale["model"] = "different-model"
-    with pytest.raises(_UnsupportedRequest, match="plausible provider codec"):
+    stale["messages"][-1]["content"] = "different prompt"  # type: ignore[index]
+    with pytest.raises(_UnsupportedRequest, match="annotated request disagrees"):
         projector.project_text(
             native_request,
             require_user=True,
@@ -171,7 +184,7 @@ def test_authoritative_codec_and_annotation_must_agree_with_native_payload(
 
 
 def test_response_codec_is_selected_independently_from_request_codec() -> None:
-    projector = _NativeCodecProjector()
+    projector = _ProviderProjector()
     request = projector.project_text(_chat_request(), require_user=True, codec_name="openai_chat")
     response = {
         "type": "message",
