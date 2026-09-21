@@ -20,9 +20,9 @@ def rewrite(root, mutate):
     (root / "plugins" / NAME / "release.toml").write_text(tomli_w.dumps(manifest))
 
 
-def test_catalog_has_19_targets(catalog):
+def test_catalog_has_23_targets(catalog):
     manifests = discover(catalog)
-    assert sum(len(m["platforms"]) for m in manifests.values()) == 19
+    assert sum(len(m["platforms"]) for m in manifests.values()) == 23
     assert "windows-arm64" not in manifests[NAME]["platforms"]
 
 
@@ -74,9 +74,9 @@ def test_hyphenated_tags_and_prereleases(catalog):
 def test_shared_and_local_changes(catalog):
     manifests = discover(catalog)
     assert select(manifests, ["README.md"]) == []
-    assert len(select(manifests, ["scripts/new.py"])) == 4
-    assert len(select(manifests, ["uv.lock"])) == 4
-    assert len(select(manifests, None)) == 4
+    assert len(select(manifests, ["scripts/new.py"])) == 5
+    assert len(select(manifests, ["uv.lock"])) == 5
+    assert len(select(manifests, None)) == 5
     assert [m["name"] for m in select(manifests, [f"plugins/{NAME}/README.md"])] == [NAME]
     assert not affects(NAME, [f"plugins/{NAME}-other/code.py"])
 
@@ -119,7 +119,7 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     for manifest in manifests.values():
         manifest["relay"] = {}
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
-    assert len(plan["matrix"]["include"]) == 19
+    assert len(plan["matrix"]["include"]) == 23
     assert len(calls) == 1
     plan = make_plan(manifests, {}, "push", f"refs/tags/{NAME}-0.1.0", "a" * 40, None, catalog)
     assert len(plan["matrix"]["include"]) == 4

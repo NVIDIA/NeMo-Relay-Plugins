@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nemoguardrails-nemo-relay"
+version = "0.1.0"
+description = "NeMo Guardrails text and structural function-tool worker for NeMo Relay"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE*"]
+dependencies = [
+  # check_backend.py uses the async client for the opt-in remote /v1/checks lane.
+  "httpx==0.28.1",
+  "nemo-relay-plugin==0.9.0",
+  "nemoguardrails==0.24.1",
+]
+
+[dependency-groups]
+build = ["setuptools==84.0.0"]
+test = [
+  "pytest>=8",
+  "pytest-asyncio>=0.26",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nemoguardrails_nemo_relay"]
+
+[tool.uv]
+# FastEmbed accepts Loguru 0.7.2 or newer, but the 0.7.3 wheel omits its
+# license file and license metadata. Keep the newest distributable release
+# that satisfies this repository's attribution checks.
+constraint-dependencies = ["loguru==0.7.2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nemoguardrails_nemo_relay*"]
