@@ -27,6 +27,21 @@ def chat_request(
     }
 
 
+def guardrails_chat_request(
+    messages: list[dict[str, object]],
+    **content: object,
+) -> dict[str, object]:
+    """Build the common provider request used by Guardrails runtime tests."""
+
+    return chat_request(
+        messages,
+        headers={"authorization": "not-forwarded-to-guardrails"},
+        model="fixture-model",
+        include_response_format=False,
+        **content,
+    )
+
+
 def responses_request(input_value: object = "hello", **content: object) -> dict[str, object]:
     return {
         "headers": {},
@@ -126,6 +141,71 @@ def tool_schema() -> dict[str, object]:
         "properties": {"city": {"type": "string"}},
         "required": ["city"],
         "additionalProperties": False,
+    }
+
+
+def chat_tool_request(
+    *,
+    tool_name: str = "weather",
+    user_text: str = "weather",
+    with_result: bool = False,
+    trailing_user_text: str | None = None,
+) -> dict[str, object]:
+    messages: list[dict[str, object]] = [{"role": "user", "content": user_text}]
+    if with_result:
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": tool_name, "arguments": '{"city":"Paris"}'},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
+            ]
+        )
+    if trailing_user_text is not None:
+        messages.append({"role": "user", "content": trailing_user_text})
+    return chat_request(
+        messages,
+        include_response_format=False,
+        tools=[
+            {
+                "type": "function",
+                "function": {"name": tool_name, "parameters": tool_schema()},
+            }
+        ],
+    )
+
+
+def chat_tool_response(
+    name: str = "weather",
+    arguments: str = '{"city":"Rome"}',
+) -> dict[str, object]:
+    return {
+        "id": "chatcmpl-1",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-2",
+                            "type": "function",
+                            "function": {"name": name, "arguments": arguments},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
     }
 
 

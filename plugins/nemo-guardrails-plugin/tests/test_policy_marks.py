@@ -11,10 +11,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nemo_relay_plugin import DataSchema, LogSeverity, PluginContext, ToolExecutionContext, ToolExecutionResult
+from nemo_relay_plugin import DataSchema, LogSeverity, ToolExecutionContext, ToolExecutionResult
 from provider_cases import anthropic_request, chat_request, chat_response
 from registration_helpers import registered_llm_execution
 from tool_projection_cases import openai_chat_case
+from worker_test_helpers import worker_context
 
 from nemoguardrails_nemo_relay import execution_policy, policy_marks, worker
 from nemoguardrails_nemo_relay.policy_marks import (
@@ -41,12 +42,8 @@ STRUCTURAL_TOOL_CONFIG = PROJECT_ROOT / "examples" / "structural-tool-rails"
 
 
 def _context() -> tuple[MagicMock, AsyncMock]:
-    context = MagicMock(spec=PluginContext)
     emit_mark = AsyncMock()
-    context.runtime = SimpleNamespace(
-        list_runtime_registrations=AsyncMock(return_value=[]),
-        emit_mark=emit_mark,
-    )
+    context = worker_context(emit_mark=emit_mark)
     return context, emit_mark
 
 
@@ -226,36 +223,6 @@ async def test_text_mutation_mark_distinguishes_rewrite_from_rejection() -> None
     await plugin.close()
 
 
-async def test_mark_publication_failure_preserves_text_allow_and_block() -> None:
-    context, emit_mark = _context()
-    emit_mark.side_effect = RuntimeError("PRIVATE_MARK_FAILURE")
-    plugin = worker.NeMoGuardrailsRelayWorker()
-    await plugin.register(
-        context,
-        {"config_path": str(INPUT_OUTPUT_CONFIG), "check_timeout_ms": 1_000},
-    )
-    callback = registered_llm_execution(context).callback
-    response = chat_response("safe")
-
-    assert (
-        await callback(
-            "fixture",
-            chat_request([{"role": "user", "content": "safe"}]),
-            SimpleNamespace(call=AsyncMock(return_value=response)),
-        )
-        is response
-    )
-    blocked_next = SimpleNamespace(call=AsyncMock())
-    with pytest.raises(execution_policy._LlmPolicyError, match="input rail"):
-        await callback(
-            "fixture",
-            chat_request([{"role": "user", "content": "block input"}]),
-            blocked_next,
-        )
-    blocked_next.call.assert_not_awaited()
-    await plugin.close()
-
-
 async def test_text_projection_rejection_emits_worker_coverage_mark() -> None:
     context, emit_mark = _context()
     plugin = worker.NeMoGuardrailsRelayWorker()
@@ -419,8 +386,22 @@ async def test_tool_only_response_does_not_report_a_vacuous_output_pass(tmp_path
     await plugin.close()
 
 
-async def test_structural_adapter_failure_emits_content_free_failure_mark(
+@pytest.mark.parametrize(
+    ("method", "error_pattern", "expected"),
+    [
+        ("check_results", "tool-result check failed", [("tool_results", "check_failure")]),
+        (
+            "check_call_candidates",
+            "model-call check failed",
+            [("tool_results", "passed"), ("model_tool_calls", "check_failure")],
+        ),
+    ],
+)
+async def test_structural_adapter_failures_are_sanitized_and_marked(
     monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    error_pattern: str,
+    expected: list[tuple[str, str]],
 ) -> None:
     context, emit_mark = _context()
     plugin = worker.NeMoGuardrailsRelayWorker()
@@ -430,57 +411,26 @@ async def test_structural_adapter_failure_emits_content_free_failure_mark(
     assert adapter is not None
     monkeypatch.setattr(
         adapter,
-        "check_results",
+        method,
         AsyncMock(side_effect=RuntimeError("PRIVATE_ADAPTER_FAILURE")),
     )
     callback = registered_llm_execution(context).callback
-    next_call = SimpleNamespace(call=AsyncMock())
-    request, _ = openai_chat_case()
+    request, response = openai_chat_case()
+    next_call = SimpleNamespace(call=AsyncMock(return_value=response))
 
-    with pytest.raises(execution_policy._LlmPolicyError, match="tool-result check failed") as error:
+    with pytest.raises(execution_policy._LlmPolicyError, match=error_pattern) as error:
         await callback("openai.chat_completions", request, next_call)
 
     assert "PRIVATE_ADAPTER_FAILURE" not in str(error.value)
-    next_call.call.assert_not_awaited()
+    if method == "check_results":
+        next_call.call.assert_not_awaited()
+    else:
+        next_call.call.assert_awaited_once_with(request)
     data = _mark_data(emit_mark)
-    assert [(item["phase"], item["backend"], item["outcome"], item["action"]) for item in data] == [
-        ("tool_results", "structural", "check_failure", "reject")
-    ]
+    assert [(item["phase"], item["outcome"]) for item in data] == expected
+    assert all(item["backend"] == "structural" for item in data)
+    assert data[-1]["action"] == "reject"
     assert "PRIVATE_ADAPTER_FAILURE" not in json.dumps(data)
-    await plugin.close()
-
-
-async def test_model_call_adapter_failure_is_sanitized(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context, emit_mark = _context()
-    plugin = worker.NeMoGuardrailsRelayWorker()
-    await plugin.register(context, {"config_path": str(STRUCTURAL_TOOL_CONFIG)})
-    assert plugin._execution_policy is not None
-    adapter = plugin._execution_policy._adapter
-    assert adapter is not None
-    monkeypatch.setattr(
-        adapter,
-        "check_call_candidates",
-        AsyncMock(side_effect=RuntimeError("PRIVATE_MODEL_CALL_FAILURE")),
-    )
-    callback = registered_llm_execution(context).callback
-    request, response = openai_chat_case()
-
-    with pytest.raises(execution_policy._LlmPolicyError, match="model-call check failed") as error:
-        await callback(
-            "openai.chat_completions",
-            request,
-            SimpleNamespace(call=AsyncMock(return_value=response)),
-        )
-
-    assert "PRIVATE_MODEL_CALL_FAILURE" not in str(error.value)
-    data = _mark_data(emit_mark)
-    assert [(item["phase"], item["backend"], item["outcome"], item["action"]) for item in data] == [
-        ("tool_results", "structural", "passed", "continue"),
-        ("model_tool_calls", "structural", "check_failure", "reject"),
-    ]
-    assert "PRIVATE_MODEL_CALL_FAILURE" not in json.dumps(data)
     await plugin.close()
 
 

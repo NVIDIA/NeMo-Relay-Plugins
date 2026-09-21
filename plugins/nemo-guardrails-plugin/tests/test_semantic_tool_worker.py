@@ -6,11 +6,13 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from nemo_relay_plugin import DiagnosticLevel, PluginContext, ToolExecutionContext, ToolExecutionResult
+from nemo_relay_plugin import DiagnosticLevel, ToolExecutionContext, ToolExecutionResult
+from provider_cases import chat_response, chat_tool_request
 from registration_helpers import registered_llm_execution
+from worker_test_helpers import worker_context as _context
 
 from nemoguardrails_nemo_relay import configuration, worker
 from nemoguardrails_nemo_relay.semantic_tools import SemanticToolVerdict, SemanticToolVerdictKind
@@ -18,68 +20,6 @@ from nemoguardrails_nemo_relay.semantic_tools import SemanticToolVerdict, Semant
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INPUT_CONFIG = PROJECT_ROOT / "examples" / "no-model-rails"
 INPUT_OUTPUT_CONFIG = PROJECT_ROOT / "examples" / "input-output-rails"
-
-
-def _context() -> MagicMock:
-    context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(list_runtime_registrations=AsyncMock(return_value=[]))
-    return context
-
-
-def _chat_request_with_result() -> dict[str, object]:
-    return {
-        "headers": {},
-        "content": {
-            "model": "fixture",
-            "messages": [
-                {"role": "user", "content": "look it up"},
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call-1",
-                            "type": "function",
-                            "function": {"name": "lookup", "arguments": '{"city":"Paris"}'},
-                        }
-                    ],
-                },
-                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
-                {"role": "user", "content": "summarize"},
-            ],
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "lookup",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"city": {"type": "string"}},
-                            "required": ["city"],
-                            "additionalProperties": False,
-                        },
-                    },
-                }
-            ],
-        },
-    }
-
-
-def _chat_response() -> dict[str, object]:
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 0,
-        "model": "fixture",
-        "choices": [
-            {
-                "index": 0,
-                "message": {"role": "assistant", "content": "It is sunny."},
-                "finish_reason": "stop",
-                "logprobs": None,
-            }
-        ],
-    }
 
 
 def test_semantic_result_validation_requires_output_rails() -> None:
@@ -208,8 +148,13 @@ async def test_history_mode_checks_each_prior_result_once_without_tool_intercept
         return_value=SemanticToolVerdict(SemanticToolVerdictKind.PASSED)
     )
     callback = registered_llm_execution(context).callback
-    request = _chat_request_with_result()
-    response = _chat_response()
+    request = chat_tool_request(
+        tool_name="lookup",
+        user_text="look it up",
+        with_result=True,
+        trailing_user_text="summarize",
+    )
+    response = chat_response("It is sunny.")
     next_call = SimpleNamespace(call=AsyncMock(return_value=response))
 
     assert await callback("openai.chat_completions", request, next_call) is response

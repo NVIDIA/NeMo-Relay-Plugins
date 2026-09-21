@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from nemo_relay_plugin import PluginContext
+from provider_cases import chat_request
 
 from nemoguardrails_nemo_relay import execution_policy, worker
 from nemoguardrails_nemo_relay.codec_projection import _ProviderProjector, _UnsupportedRequest
@@ -35,16 +36,6 @@ def _context(
         response=_direction(response_kind, response_codec),
         annotated_request=annotated_request,
     )
-
-
-def _chat_request() -> dict[str, object]:
-    return {
-        "headers": {},
-        "content": {
-            "model": "fixture",
-            "messages": [{"role": "user", "content": "hello"}],
-        },
-    }
 
 
 _HOST_ANNOTATIONS: dict[str, dict[str, object]] = {
@@ -126,7 +117,7 @@ def test_context_rejects_malformed_identities(context: SimpleNamespace) -> None:
 @pytest.mark.parametrize(
     ("codec_name", "native_request"),
     [
-        ("openai_chat", _chat_request()),
+        ("openai_chat", chat_request(include_response_format=False)),
         ("openai_responses", {"headers": {}, "content": {"model": "fixture", "input": "hello"}}),
         (
             "anthropic_messages",
@@ -185,7 +176,11 @@ def test_authoritative_codec_and_annotation_must_agree_on_policy_inputs(
 
 def test_response_codec_is_selected_independently_from_request_codec() -> None:
     projector = _ProviderProjector()
-    request = projector.project_text(_chat_request(), require_user=True, codec_name="openai_chat")
+    request = projector.project_text(
+        chat_request(include_response_format=False),
+        require_user=True,
+        codec_name="openai_chat",
+    )
     response = {
         "type": "message",
         "role": "assistant",
@@ -218,10 +213,11 @@ async def test_worker_uses_authoritative_context_when_the_sdk_exposes_it() -> No
     next_call = SimpleNamespace(call=AsyncMock(return_value={"choices": []}))
     codec_context = _context("builtin", "openai_chat", "opaque", None)
     try:
-        assert await callback("openai.chat_completions", _chat_request(), codec_context, next_call) == {"choices": []}
+        native_request = chat_request(include_response_format=False)
+        assert await callback("openai.chat_completions", native_request, codec_context, next_call) == {"choices": []}
         runtime_context = _context("runtime", "com.example.codec", "opaque", None)
         with pytest.raises(execution_policy._LlmPolicyError, match="cannot prove complete coverage"):
-            await callback("runtime.generate", _chat_request(), runtime_context, next_call)
+            await callback("runtime.generate", native_request, runtime_context, next_call)
     finally:
         await plugin.close()
 

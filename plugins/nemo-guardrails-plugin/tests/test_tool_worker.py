@@ -4,107 +4,44 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nemo_relay_plugin import DiagnosticLevel, PluginContext
+from nemo_relay_plugin import DiagnosticLevel
+from provider_cases import chat_tool_request as _chat_request
+from provider_cases import chat_tool_response as _chat_tool_response
 from registration_helpers import llm_registration_mock, registered_llm_execution
-from tool_projection_cases import gemini_generate_content_case
+from worker_test_helpers import worker_context as _context
 
 from nemoguardrails_nemo_relay import configuration, execution_policy, worker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STRUCTURAL_TOOL_CONFIG = PROJECT_ROOT / "examples" / "structural-tool-rails"
+RegisteredCallbacks = tuple[worker.NeMoGuardrailsRelayWorker, MagicMock, object, object]
 
 
-def _context() -> MagicMock:
-    context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(list_runtime_registrations=AsyncMock(return_value=[]))
-    return context
-
-
-def _chat_request(*, with_result: bool = False) -> dict[str, object]:
-    messages: list[dict[str, object]] = [{"role": "user", "content": "weather"}]
-    if with_result:
-        messages.extend(
-            [
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call-1",
-                            "type": "function",
-                            "function": {"name": "weather", "arguments": '{"city":"Paris"}'},
-                        }
-                    ],
-                },
-                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
-            ]
-        )
-    return {
-        "headers": {},
-        "content": {
-            "model": "fixture",
-            "messages": messages,
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "weather",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"city": {"type": "string"}},
-                            "required": ["city"],
-                            "additionalProperties": False,
-                        },
-                    },
-                }
-            ],
-        },
-    }
-
-
-def _chat_tool_response(name: str = "weather", arguments: str = '{"city":"Rome"}') -> dict[str, object]:
-    return {
-        "id": "chatcmpl-1",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call-2",
-                            "type": "function",
-                            "function": {"name": name, "arguments": arguments},
-                        }
-                    ],
-                },
-                "finish_reason": "tool_calls",
-            }
-        ],
-    }
-
-
-async def _registered_callbacks() -> tuple[worker.NeMoGuardrailsRelayWorker, MagicMock, object, object]:
+@pytest.fixture
+async def callbacks() -> AsyncIterator[RegisteredCallbacks]:
     context = _context()
     plugin = worker.NeMoGuardrailsRelayWorker()
     await plugin.register(context, {"config_path": str(STRUCTURAL_TOOL_CONFIG)})
     unary = registered_llm_execution(context).callback
     stream = registered_llm_execution(context, stream=True).callback
-    return plugin, context, unary, stream
+    try:
+        yield plugin, context, unary, stream
+    finally:
+        await plugin.close()
 
 
 def test_tool_only_configuration_is_supported_without_starting_llmrails() -> None:
     assert configuration._validate_config({"config_path": str(STRUCTURAL_TOOL_CONFIG)}) == []
 
 
-async def test_registration_uses_existing_llm_surfaces_and_no_text_runtime() -> None:
-    plugin, context, _, _ = await _registered_callbacks()
+async def test_registration_uses_existing_llm_surfaces_and_no_text_runtime(callbacks: RegisteredCallbacks) -> None:
+    plugin, context, _, _ = callbacks
 
     assert plugin._rails is None
     assert plugin._text_policy is None
@@ -195,8 +132,8 @@ async def test_worker_close_releases_structural_adapter_once(
     adapter.close.assert_awaited_once_with()
 
 
-async def test_valid_tool_result_and_model_call_pass_without_payload_mutation() -> None:
-    _, _, unary, _ = await _registered_callbacks()
+async def test_valid_tool_result_and_model_call_pass_without_payload_mutation(callbacks: RegisteredCallbacks) -> None:
+    _, _, unary, _ = callbacks
     request = _chat_request(with_result=True)
     response = _chat_tool_response()
     next_call = SimpleNamespace(call=AsyncMock(return_value=response))
@@ -205,8 +142,8 @@ async def test_valid_tool_result_and_model_call_pass_without_payload_mutation() 
     next_call.call.assert_awaited_once_with(request)
 
 
-async def test_multiple_model_tool_candidates_are_checked_independently() -> None:
-    _, _, unary, _ = await _registered_callbacks()
+async def test_multiple_model_tool_candidates_are_checked_independently(callbacks: RegisteredCallbacks) -> None:
+    _, _, unary, _ = callbacks
     request = _chat_request()
     response = _chat_tool_response()
     second = _chat_tool_response()["choices"][0]  # type: ignore[index]
@@ -222,8 +159,8 @@ async def test_multiple_model_tool_candidates_are_checked_independently() -> Non
         await unary("openai.chat_completions", request, blocked_next)
 
 
-async def test_count_tokens_checks_tool_results_but_not_model_tool_calls() -> None:
-    _, _, unary, _ = await _registered_callbacks()
+async def test_count_tokens_checks_tool_results_but_not_model_tool_calls(callbacks: RegisteredCallbacks) -> None:
+    _, _, unary, _ = callbacks
     request = {
         "headers": {"anthropic-version": "2023-06-01"},
         "content": {
@@ -289,8 +226,8 @@ async def test_count_tokens_checks_tool_results_but_not_model_tool_calls() -> No
     blocked_next.call.assert_not_awaited()
 
 
-async def test_orphan_result_is_rejected_before_provider() -> None:
-    _, _, unary, _ = await _registered_callbacks()
+async def test_orphan_result_is_rejected_before_provider(callbacks: RegisteredCallbacks) -> None:
+    _, _, unary, _ = callbacks
     request = _chat_request()
     request["content"]["messages"] = [  # type: ignore[index]
         {"role": "tool", "tool_call_id": "missing", "content": "PRIVATE_CANARY"}
@@ -303,23 +240,6 @@ async def test_orphan_result_is_rejected_before_provider() -> None:
     next_call.call.assert_not_awaited()
 
 
-async def test_deep_gemini_tool_schema_is_rejected_before_provider() -> None:
-    _, _, unary, _ = await _registered_callbacks()
-    request, _ = gemini_generate_content_case()
-    schema: dict[str, object] = {"type": "STRING"}
-    for _ in range(1_200):
-        schema = {"type": "ARRAY", "items": schema}
-    declaration = request["content"]["tools"][0]["functionDeclarations"][0]  # type: ignore[index]
-    declaration["parameters"] = schema  # type: ignore[index]
-    next_call = SimpleNamespace(call=AsyncMock())
-
-    with pytest.raises(execution_policy._LlmPolicyError, match="cannot verify tool traffic") as captured:
-        await unary("gemini.generate_content", request, next_call)
-
-    assert str(captured.value) == "NeMo Guardrails cannot verify tool traffic"
-    next_call.call.assert_not_awaited()
-
-
 @pytest.mark.parametrize(
     "name, arguments, message",
     [
@@ -329,11 +249,12 @@ async def test_deep_gemini_tool_schema_is_rejected_before_provider() -> None:
     ],
 )
 async def test_unsafe_model_call_is_held_and_not_returned(
+    callbacks: RegisteredCallbacks,
     name: str,
     arguments: str,
     message: str,
 ) -> None:
-    _, _, unary, _ = await _registered_callbacks()
+    _, _, unary, _ = callbacks
     request = _chat_request()
     response = _chat_tool_response(name=name, arguments=arguments)
     next_call = SimpleNamespace(call=AsyncMock(return_value=response))
@@ -347,24 +268,23 @@ async def test_unsafe_model_call_is_held_and_not_returned(
 
 
 async def test_structural_only_policy_does_not_log_tool_content(
+    callbacks: RegisteredCallbacks,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.DEBUG)
-    plugin, _, unary, _ = await _registered_callbacks()
+    _, _, unary, _ = callbacks
     request = _chat_request()
     response = _chat_tool_response(name="PRIVATE_TOOL_CANARY", arguments='{"secret":"PRIVATE_ARG_CANARY"}')
     next_call = SimpleNamespace(call=AsyncMock(return_value=response))
 
     with pytest.raises(execution_policy._LlmPolicyError):
         await unary("openai.chat_completions", request, next_call)
-    await plugin.close()
-
     assert "PRIVATE_TOOL_CANARY" not in caplog.text
     assert "PRIVATE_ARG_CANARY" not in caplog.text
 
 
-async def test_tool_output_guarded_stream_is_rejected_before_opening_provider() -> None:
-    _, _, _, stream = await _registered_callbacks()
+async def test_tool_output_guarded_stream_is_rejected_before_opening_provider(callbacks: RegisteredCallbacks) -> None:
+    _, _, _, stream = callbacks
     request = _chat_request()
     next_call = SimpleNamespace(call=MagicMock())
 

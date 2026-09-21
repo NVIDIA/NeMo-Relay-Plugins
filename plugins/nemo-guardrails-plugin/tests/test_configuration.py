@@ -366,22 +366,30 @@ def test_validation_requires_exact_guardrails_runtime(monkeypatch: pytest.Monkey
     assert "0.24.0" not in diagnostics[0].message
 
 
-def test_validation_requires_acknowledgement_for_ignored_rail_families(tmp_path: Path) -> None:
-    config_path = tmp_path / "input-and-output"
+@pytest.mark.parametrize(
+    ("name", "extra_yaml", "family"),
+    [
+        (
+            "input-output-and-dialog",
+            "  output:\n    flows:\n      - output rail\n  dialog:\n    single_call:\n      enabled: true\n",
+            "dialog",
+        ),
+        ("input-and-retrieval", "  retrieval:\n    flows:\n      - retrieval rail\n", "retrieval"),
+    ],
+)
+def test_validation_requires_acknowledgement_for_ignored_rail_families(
+    tmp_path: Path,
+    name: str,
+    extra_yaml: str,
+    family: str,
+) -> None:
+    config_path = tmp_path / name
     shutil.copytree(NO_MODEL_CONFIG, config_path)
     (config_path / "config.yml").write_text(
-        "rails:\n"
-        "  input:\n"
-        "    flows:\n"
-        "      - input rail\n"
-        "  output:\n"
-        "    flows:\n"
-        "      - output rail\n"
-        "  dialog:\n"
-        "    single_call:\n"
-        "      enabled: true\n",
+        "rails:\n  input:\n    flows:\n      - input rail\n" + extra_yaml,
         encoding="utf-8",
     )
+
     rejected = configuration._validate_config({"config_path": str(config_path)})
     acknowledged = configuration._validate_config(
         {"config_path": str(config_path), "allow_ignored_rail_families": True}
@@ -390,30 +398,8 @@ def test_validation_requires_acknowledgement_for_ignored_rail_families(tmp_path:
     assert len(rejected) == 1
     assert rejected[0].level == DiagnosticLevel.ERROR
     assert rejected[0].code == f"{configuration.PLUGIN_ID}.ignored_rail_families"
-    assert "dialog" in rejected[0].message
+    assert family in rejected[0].message
     assert "output" not in rejected[0].message
-    assert len(acknowledged) == 1
-    assert acknowledged[0].level == DiagnosticLevel.WARNING
-    assert acknowledged[0].code == rejected[0].code
-
-
-def test_validation_requires_acknowledgement_for_retrieval_rails(tmp_path: Path) -> None:
-    config_path = tmp_path / "input-and-retrieval"
-    shutil.copytree(NO_MODEL_CONFIG, config_path)
-    (config_path / "config.yml").write_text(
-        "rails:\n  input:\n    flows:\n      - input rail\n  retrieval:\n    flows:\n      - retrieval rail\n",
-        encoding="utf-8",
-    )
-
-    rejected = configuration._validate_config({"config_path": str(config_path)})
-    acknowledged = configuration._validate_config(
-        {"config_path": str(config_path), "allow_ignored_rail_families": True}
-    )
-
-    assert len(rejected) == 1
-    assert rejected[0].level == DiagnosticLevel.ERROR
-    assert rejected[0].code == f"{configuration.PLUGIN_ID}.ignored_rail_families"
-    assert "retrieval" in rejected[0].message
     assert len(acknowledged) == 1
     assert acknowledged[0].level == DiagnosticLevel.WARNING
     assert acknowledged[0].code == rejected[0].code
@@ -485,14 +471,29 @@ def test_validation_does_not_flag_default_dialog_settings(tmp_path: Path) -> Non
     assert configuration._validate_config({"config_path": str(config_path)}) == []
 
 
-def test_validation_rejects_standard_colang_dialog_behavior(tmp_path: Path) -> None:
-    config_path = tmp_path / "colang-dialog"
+@pytest.mark.parametrize(
+    ("name", "colang"),
+    [
+        (
+            "colang-dialog",
+            '\ndefine user express greeting\n  "hello there"\n\n'
+            "define flow greeting\n  user express greeting\n  bot refuse to respond\n",
+        ),
+        (
+            "implicit-dialog",
+            '\ndefine flow unselected behavior\n  if $user_message == "trigger"\n    bot refuse to respond\n',
+        ),
+    ],
+)
+def test_validation_rejects_unsupported_colang_dialog_behavior(
+    tmp_path: Path,
+    name: str,
+    colang: str,
+) -> None:
+    config_path = tmp_path / name
     shutil.copytree(NO_MODEL_CONFIG, config_path)
     with (config_path / "rails.co").open("a", encoding="utf-8") as rails_file:
-        rails_file.write(
-            '\ndefine user express greeting\n  "hello there"\n\n'
-            "define flow greeting\n  user express greeting\n  bot refuse to respond\n"
-        )
+        rails_file.write(colang)
 
     for config in (
         {"config_path": str(config_path)},
@@ -503,21 +504,6 @@ def test_validation_rejects_standard_colang_dialog_behavior(tmp_path: Path) -> N
         assert len(diagnostics) == 1
         assert diagnostics[0].level == DiagnosticLevel.ERROR
         assert diagnostics[0].code == f"{configuration.PLUGIN_ID}.unsupported_dialog_flows"
-
-
-def test_validation_rejects_unselected_top_level_colang_flow_without_user_messages(tmp_path: Path) -> None:
-    config_path = tmp_path / "implicit-dialog"
-    shutil.copytree(NO_MODEL_CONFIG, config_path)
-    with (config_path / "rails.co").open("a", encoding="utf-8") as rails_file:
-        rails_file.write(
-            '\ndefine flow unselected behavior\n  if $user_message == "trigger"\n    bot refuse to respond\n'
-        )
-
-    diagnostics = configuration._validate_config({"config_path": str(config_path), "allow_ignored_rail_families": True})
-
-    assert len(diagnostics) == 1
-    assert diagnostics[0].level == DiagnosticLevel.ERROR
-    assert diagnostics[0].code == f"{configuration.PLUGIN_ID}.unsupported_dialog_flows"
 
 
 def test_validation_allows_explicit_colang_subflow_helper(tmp_path: Path) -> None:

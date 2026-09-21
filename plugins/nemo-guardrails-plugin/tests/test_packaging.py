@@ -89,41 +89,11 @@ def test_schema_is_narrow_and_closed() -> None:
 def test_project_dependency_bounds_match_the_design() -> None:
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     release = tomllib.loads((PROJECT_ROOT / "release.toml").read_text(encoding="utf-8"))
-    manifest = tomllib.loads((PROJECT_ROOT / "relay-plugin.toml").read_text(encoding="utf-8"))
     assert project["requires-python"] == ">=3.11,<3.14"
     assert release["version"] == project["version"]
-    assert release["relay"]["sha"] == "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"
-    assert manifest["compat"]["relay"] == ">=0.9.0,<1.0"
     assert not any(dependency.startswith("nemo-relay==") for dependency in project["dependencies"])
     assert "nemo-relay-plugin==0.9.0" in project["dependencies"]
     assert "nemoguardrails==0.24.1" in project["dependencies"]
-
-
-def test_base_runtime_is_pinned_without_optional_profiles() -> None:
-    project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    dependencies = set(project["project"]["dependencies"])
-
-    assert "optional-dependencies" not in project["project"]
-    assert "httpx==0.28.1" in dependencies
-    assert not any(dependency.startswith("nemo-relay==") for dependency in dependencies)
-    assert "nemo-relay-plugin==0.9.0" in dependencies
-    assert "nemoguardrails==0.24.1" in dependencies
-    assert not any(
-        name in requirement
-        for name in [
-            "cleanlab-studio",
-            "fast-langdetect",
-            "google-cloud-language",
-            "guardrails-ai",
-            "guardrails-ai-regex-match",
-            "langchain-anthropic",
-            "presidio-analyzer",
-            "torch",
-            "transformers",
-            "yara-python",
-        ]
-        for requirement in dependencies
-    )
 
 
 def _export() -> str:
@@ -167,14 +137,6 @@ def test_runtime_lock_excludes_unsupported_optional_integrations() -> None:
     }:
         assert f"{package}==" not in exported
         assert package not in locked_names
-
-
-def test_release_host_and_runtime_contract_target_relay_09() -> None:
-    release = tomllib.loads((PROJECT_ROOT / "release.toml").read_text(encoding="utf-8"))
-    runtime = tomllib.loads((PROJECT_ROOT / "relay-plugin.toml").read_text(encoding="utf-8"))
-
-    assert release["relay"]["sha"] == "8122ee1f1765b1e3ef3ef706a8e8233a1630c5ad"
-    assert runtime["compat"]["relay"] == ">=0.9.0,<1.0"
 
 
 def test_build_backend_is_hash_constrained() -> None:

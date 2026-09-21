@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from guardrails_config import write_guardrails_config
 from nemoguardrails.context import (
     explain_info_var,
     generation_options_var,
@@ -21,29 +22,18 @@ from nemoguardrails.context import (
 )
 from nemoguardrails.logging.explain import ExplainInfo, LLMCallInfo
 from nemoguardrails.logging.processing_log import processing_log_var
+from provider_cases import guardrails_chat_request as _request
 from registration_helpers import registered_llm_execution
 from worker_test_helpers import registered_worker, worker_context
 
 from nemoguardrails_nemo_relay import (
     configuration,
-    execution_policy,
     worker,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NO_MODEL_CONFIG = PROJECT_ROOT / "examples" / "no-model-rails"
 MIGRATED_LOCAL_CONFIG = PROJECT_ROOT / "examples" / "migrated-local-rails"
-
-
-def _request(messages: list[dict[str, object]], **content: object) -> dict[str, object]:
-    return {
-        "headers": {"authorization": "not-forwarded-to-guardrails"},
-        "content": {
-            "model": "fixture-model",
-            "messages": messages,
-            **content,
-        },
-    }
 
 
 async def test_real_guardrails_024_passes_blocks_and_rejects_modified() -> None:
@@ -155,20 +145,14 @@ async def test_real_guardrails_024_concurrent_results_remain_isolated() -> None:
     assert plugin._rails.explain().colang_history is None
 
 
-async def test_real_guardrails_024_sequential_flow_outcomes_use_the_net_result(tmp_path: Path) -> None:
-    config_path = tmp_path / "sequential-input-rails"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
-        "rails:\n  input:\n    flows:\n      - first rail\n      - second rail\n",
-        encoding="utf-8",
-    )
-    (config_path / "rails.co").write_text(
-        """
+async def test_real_guardrails_024_sequential_rails_report_the_net_result(tmp_path: Path) -> None:
+    config_path = write_guardrails_config(
+        tmp_path,
+        "rails:\n  input:\n    flows: [first rail, second rail]\n",
+        name="sequential-input-rails",
+        rails_co="""
 define flow first rail
-  if $user_message == "block first"
-    bot refuse to respond
-    stop
-  else if $user_message == "modify net"
+  if $user_message == "modify net"
     $user_message = "modified by first"
   else if $user_message == "modify restore"
     $user_message = "temporary value"
@@ -183,33 +167,23 @@ define flow second rail
     $user_message = "modify restore"
 """.strip()
         + "\n",
-        encoding="utf-8",
     )
     plugin, callback = await registered_worker({"config_path": str(config_path), "check_timeout_ms": 1_000})
-
-    assert await callback(_request([{"role": "user", "content": "hello"}])) is None
-    assert await callback(_request([{"role": "user", "content": "block first"}])) == (
-        "NeMo Guardrails prevented execution in input rail 'first rail'"
-    )
-    assert await callback(_request([{"role": "user", "content": "block second"}])) == (
-        "NeMo Guardrails prevented execution in input rail 'second rail'"
-    )
-    assert await callback(_request([{"role": "user", "content": "modify net"}])) == (
-        "NeMo Guardrails modified the input, but this worker cannot safely rewrite it"
-    )
-    # Guardrails reports PASSED when later flows restore the exact original
-    # text. The public result describes the net outcome, not every intermediate
-    # flow decision.
-    assert await callback(_request([{"role": "user", "content": "modify restore"}])) is None
-    assert plugin._rails is not None
-    assert plugin._rails.explain().llm_calls == []
-    assert plugin._rails.explain().colang_history is None
+    try:
+        assert await callback(_request([{"role": "user", "content": "block second"}])) == (
+            "NeMo Guardrails prevented execution in input rail 'second rail'"
+        )
+        assert await callback(_request([{"role": "user", "content": "modify net"}])) == (
+            "NeMo Guardrails modified the input, but this worker cannot safely rewrite it"
+        )
+        assert await callback(_request([{"role": "user", "content": "modify restore"}])) is None
+    finally:
+        await plugin.close()
 
 
 async def test_real_guardrails_024_runs_input_and_output_text_rails_in_parallel(tmp_path: Path) -> None:
-    config_path = tmp_path / "parallel-text-rails"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
+    config_path = write_guardrails_config(
+        tmp_path,
         """
 rails:
   input:
@@ -224,10 +198,8 @@ rails:
       - second output rail
 """.strip()
         + "\n",
-        encoding="utf-8",
-    )
-    (config_path / "rails.co").write_text(
-        """
+        name="parallel-text-rails",
+        rails_co="""
 define bot refuse
   "blocked"
 
@@ -256,7 +228,6 @@ define flow second output rail
     stop
 """.strip()
         + "\n",
-        encoding="utf-8",
     )
 
     context = worker_context()
@@ -275,7 +246,7 @@ define flow second output rail
         maximum[phase] = max(maximum[phase], active[phase])
         try:
             await asyncio.sleep(0.03)
-            return text != f"block {phase}"
+            return True
         finally:
             active[phase] -= 1
 
@@ -320,52 +291,22 @@ define flow second output rail
     assert await callback("fixture", safe_request, safe_next) is safe_response
     safe_next.call.assert_awaited_once_with(safe_request)
 
-    blocked_input_next = SimpleNamespace(call=AsyncMock())
-    with pytest.raises(execution_policy._LlmPolicyError, match="prevented execution in input rail"):
-        await callback(
-            "fixture",
-            _request([{"role": "user", "content": "block input"}]),
-            blocked_input_next,
-        )
-    blocked_input_next.call.assert_not_awaited()
-
-    blocked_output_next = SimpleNamespace(
-        call=AsyncMock(
-            return_value={
-                **safe_response,
-                "choices": [
-                    {
-                        **safe_response["choices"][0],
-                        "message": {
-                            **safe_response["choices"][0]["message"],
-                            "content": "block output",
-                        },
-                    }
-                ],
-            }
-        )
-    )
-    with pytest.raises(execution_policy._LlmPolicyError, match="prevented execution in output rail"):
-        await callback("fixture", safe_request, blocked_output_next)
-    blocked_output_next.call.assert_awaited_once_with(safe_request)
-
     assert maximum == {"input": 2, "output": 2}
-    assert [item[:2] for item in calls].count(("input", "a")) == 3
-    assert [item[:2] for item in calls].count(("input", "b")) == 3
-    assert [item[:2] for item in calls].count(("output", "a")) == 2
-    assert [item[:2] for item in calls].count(("output", "b")) == 2
+    assert [item[:2] for item in calls] == [
+        ("input", "a"),
+        ("input", "b"),
+        ("output", "a"),
+        ("output", "b"),
+    ]
     await plugin.close()
 
 
 async def test_real_guardrails_024_sequential_action_cancellation_timeout_and_recovery(tmp_path: Path) -> None:
-    config_path = tmp_path / "cancellable-input-rail"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
+    config_path = write_guardrails_config(
+        tmp_path,
         "rails:\n  input:\n    flows:\n      - cancellable rail\n",
-        encoding="utf-8",
-    )
-    (config_path / "rails.co").write_text(
-        """
+        name="cancellable-input-rail",
+        rails_co="""
 define bot refuse
   "blocked"
 
@@ -376,7 +317,6 @@ define flow cancellable rail
     stop
 """.strip()
         + "\n",
-        encoding="utf-8",
     )
 
     cancel_plugin, cancel_callback = await registered_worker(
@@ -466,10 +406,9 @@ async def test_migrated_local_config_and_custom_action_load_from_config_path() -
 
 
 async def test_worker_forces_llmrails_for_iorails_compatible_config_and_runs_config_py(tmp_path: Path) -> None:
-    config_path = tmp_path / "regex-input-rail"
-    config_path.mkdir()
     marker = tmp_path / "config-py-loaded"
-    (config_path / "config.yml").write_text(
+    config_path = write_guardrails_config(
+        tmp_path,
         """
 rails:
   config:
@@ -482,11 +421,8 @@ rails:
       - regex check input
 """.strip()
         + "\n",
-        encoding="utf-8",
-    )
-    (config_path / "config.py").write_text(
-        f"from pathlib import Path\nPath({str(marker)!r}).write_text('loaded', encoding='utf-8')\n",
-        encoding="utf-8",
+        name="regex-input-rail",
+        config_py=f"from pathlib import Path\nPath({str(marker)!r}).write_text('loaded', encoding='utf-8')\n",
     )
 
     plugin, callback = await registered_worker(

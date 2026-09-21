@@ -8,8 +8,8 @@ import json
 import pytest
 from provider_cases import (
     anthropic_request,
-    chat_request,
     gemini_request,
+    guardrails_chat_request,
     oci_request,
     responses_request,
 )
@@ -20,13 +20,7 @@ from nemoguardrails_nemo_relay import (
 
 
 def _request(messages: list[dict[str, object]], **content: object) -> dict[str, object]:
-    return chat_request(
-        messages,
-        headers={"authorization": "not-forwarded-to-guardrails"},
-        model="fixture-model",
-        include_response_format=False,
-        **content,
-    )
+    return guardrails_chat_request(messages, **content)
 
 
 def _anthropic_request(messages: list[dict[str, object]], **content: object) -> dict[str, object]:

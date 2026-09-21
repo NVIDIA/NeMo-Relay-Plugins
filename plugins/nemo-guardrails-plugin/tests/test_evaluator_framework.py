@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from guardrails_config import write_guardrails_config
 
 from nemoguardrails_nemo_relay import configuration, evaluator_framework
 from nemoguardrails_nemo_relay.evaluator_framework import (
@@ -81,84 +82,27 @@ def test_default_openai_compatible_evaluator_needs_no_optional_profile() -> None
     assert evaluator_framework_issues(_config("nim", "openai"), EvaluatorFramework.DEFAULT) == ()
 
 
-def test_worker_requires_explicit_langchain_for_native_anthropic_evaluator(
-    tmp_path: Path,
-) -> None:
-    config_path = tmp_path / "anthropic-evaluator"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
-        """
-models:
-  - type: main
-    engine: anthropic
-    model: claude-test
-rails:
-  config:
-    regex_detection:
-      input:
-        patterns:
-          - BLOCK
-  input:
-    flows:
-      - regex check input
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-
-    diagnostics = configuration._validate_config({"config_path": str(config_path)})
-
-    assert any(item.code.endswith(".anthropic_evaluator_requires_langchain") for item in diagnostics)
-
-
-def test_worker_accepts_complete_langchain_anthropic_profile(
+@pytest.mark.parametrize(
+    ("engine", "framework", "expected_error"),
+    [
+        ("anthropic", None, "anthropic_evaluator_requires_langchain"),
+        ("anthropic", "langchain", None),
+        ("openai", "langchain", "unsupported_langchain_evaluator_engine"),
+    ],
+)
+def test_worker_validates_evaluator_framework_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    engine: str,
+    framework: str | None,
+    expected_error: str | None,
 ) -> None:
-    config_path = tmp_path / "anthropic-langchain-evaluator"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
-        """
+    config_path = write_guardrails_config(
+        tmp_path,
+        f"""
 models:
   - type: main
-    engine: anthropic
-    model: claude-test
-rails:
-  config:
-    regex_detection:
-      input:
-        patterns:
-          - BLOCK
-  input:
-    flows:
-      - regex check input
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(evaluator_framework, "_installed", lambda _name: True)
-
-    diagnostics = configuration._validate_config(
-        {
-            "config_path": str(config_path),
-            "evaluator_framework": "langchain",
-        }
-    )
-
-    assert not [item for item in diagnostics if item.level.value == "error"]
-
-
-def test_worker_rejects_unqualified_langchain_evaluator_engine(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config_path = tmp_path / "openai-langchain-evaluator"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
-        """
-models:
-  - type: main
-    engine: openai
+    engine: {engine}
     model: fixture
 rails:
   config:
@@ -171,17 +115,13 @@ rails:
       - regex check input
 """.strip()
         + "\n",
-        encoding="utf-8",
     )
     monkeypatch.setattr(evaluator_framework, "_installed", lambda _name: True)
+    config: dict[str, object] = {"config_path": str(config_path)}
+    if framework is not None:
+        config["evaluator_framework"] = framework
 
-    diagnostics = configuration._validate_config(
-        {
-            "config_path": str(config_path),
-            "evaluator_framework": "langchain",
-        }
-    )
+    diagnostics = configuration._validate_config(config)
+    errors = [item.code.rsplit(".", 1)[-1] for item in diagnostics if item.level.value == "error"]
 
-    assert [item.code for item in diagnostics if item.code.endswith(".unsupported_langchain_evaluator_engine")] == [
-        "nemoguardrails.nemo_relay.unsupported_langchain_evaluator_engine"
-    ]
+    assert errors == ([] if expected_error is None else [expected_error])

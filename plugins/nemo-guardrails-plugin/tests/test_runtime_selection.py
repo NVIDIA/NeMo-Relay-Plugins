@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from guardrails_config import write_guardrails_config
 from nemo_relay_plugin import PluginContext
 from nemoguardrails import RailsConfig
 from registration_helpers import registered_llm_execution
@@ -22,11 +23,7 @@ from nemoguardrails_nemo_relay.runtime_selection import (
 
 
 def _config(tmp_path: Path, yaml: str, colang: str | None = None) -> tuple[Path, RailsConfig]:
-    config_path = tmp_path / "guardrails"
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(yaml, encoding="utf-8")
-    if colang is not None:
-        (config_path / "rails.co").write_text(colang, encoding="utf-8")
+    config_path = write_guardrails_config(tmp_path, yaml, rails_co=colang)
     return config_path, RailsConfig.from_path(str(config_path))
 
 

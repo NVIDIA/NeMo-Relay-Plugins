@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import json
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
+from http_test_server import HttpRequest, loopback_http_server
 
 from nemoguardrails_nemo_relay.check_backend import (
     CheckBackendError,
@@ -174,33 +173,16 @@ async def test_remote_backend_rejects_unknown_response_fields() -> None:
 async def test_remote_backend_uses_a_real_bounded_loopback_http_connection() -> None:
     observed: list[dict[str, object]] = []
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP hook
-            length = int(self.headers["content-length"])
-            observed.append(json.loads(self.rfile.read(length)))
-            body = json.dumps({"status": "passed", "content": "hello", "rail": None}).encode()
-            self.send_response(200)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+    def respond(request: HttpRequest) -> tuple[int, bytes]:
+        observed.append(json.loads(request.body))
+        return 200, json.dumps({"status": "passed", "content": "hello", "rail": None}).encode()
 
-        def log_message(self, _format: str, *_args: object) -> None:
-            return None
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    backend = RemoteChecksBackend(
-        _settings(endpoint=f"http://127.0.0.1:{server.server_port}"),
-    )
-    try:
-        result = await backend.check([{"role": "user", "content": "hello"}], "input")
-    finally:
-        await backend.close()
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+    with loopback_http_server(respond) as endpoint:
+        backend = RemoteChecksBackend(_settings(endpoint=endpoint))
+        try:
+            result = await backend.check([{"role": "user", "content": "hello"}], "input")
+        finally:
+            await backend.close()
 
     assert result == CheckResult(CheckStatus.PASSED, "hello")
     assert observed[0]["guardrails"] == {"config_ids": ["policy-a"], "rail_types": ["input"]}

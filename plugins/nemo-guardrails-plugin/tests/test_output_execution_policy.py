@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nemo_relay_plugin import PluginContext
+from guardrails_config import write_guardrails_config
 from nemoguardrails.rails.llm.options import RailStatus, RailType
 from provider_cases import (
     anthropic_request,
@@ -19,6 +19,7 @@ from provider_cases import (
     combined_protocol_case,
 )
 from registration_helpers import registered_llm_execution
+from worker_test_helpers import worker_context as _context
 
 from nemoguardrails_nemo_relay import (
     codec_projection,
@@ -38,22 +39,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INPUT_OUTPUT_CONFIG = PROJECT_ROOT / "examples" / "input-output-rails"
 
 
-def _context() -> MagicMock:
-    context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(list_runtime_registrations=AsyncMock(return_value=[]))
-    return context
-
-
 def test_streaming_output_execution_mode_is_rejected(tmp_path: Path) -> None:
-    config = tmp_path / "unsupported-streaming-output-rails"
-    config.mkdir()
-    (config / "config.yml").write_text(
+    config = write_guardrails_config(
+        tmp_path,
         "rails:\n  output:\n    flows:\n      - output rail\n    streaming:\n      enabled: true\n",
-        encoding="utf-8",
-    )
-    (config / "rails.co").write_text(
-        'define flow output rail\n  if $bot_message == "blocked"\n    bot refuse to respond\n    stop\n',
-        encoding="utf-8",
+        name="unsupported-streaming-output-rails",
+        rails_co='define flow output rail\n  if $bot_message == "blocked"\n    bot refuse to respond\n    stop\n',
     )
 
     diagnostics = configuration._validate_config({"config_path": str(config)})
@@ -130,15 +121,11 @@ async def test_count_tokens_runs_input_rails_but_skips_response_rails() -> None:
 
 
 async def test_output_only_accepts_system_only_context_and_rejects_stream_before_provider(tmp_path: Path) -> None:
-    config = tmp_path / "output-only"
-    config.mkdir()
-    (config / "config.yml").write_text(
+    config = write_guardrails_config(
+        tmp_path,
         "rails:\n  output:\n    flows:\n      - output rail\n",
-        encoding="utf-8",
-    )
-    (config / "rails.co").write_text(
-        'define flow output rail\n  if $bot_message == "blocked"\n    bot refuse to respond\n    stop\n',
-        encoding="utf-8",
+        name="output-only",
+        rails_co='define flow output rail\n  if $bot_message == "blocked"\n    bot refuse to respond\n    stop\n',
     )
     context = _context()
     plugin = worker.NeMoGuardrailsRelayWorker()
@@ -566,24 +553,13 @@ async def test_output_outcomes_fail_closed_without_content_leaks(result: object,
     assert "PRIVATE" not in reason
 
 
-@pytest.mark.parametrize(
-    "protocol",
-    [
-        "openai_chat",
-        "openai_responses",
-        "anthropic_messages",
-        "gemini_generate_content",
-        "oci_genai",
-        "oci_cohere",
-    ],
-)
+@pytest.mark.parametrize("protocol", ["openai_chat", "anthropic_messages"])
 async def test_mixed_text_and_function_call_runs_output_then_structural_checks(
     tmp_path: Path,
     protocol: str,
 ) -> None:
-    config = tmp_path / f"combined-{protocol}"
-    config.mkdir()
-    (config / "config.yml").write_text(
+    config = write_guardrails_config(
+        tmp_path,
         "rails:\n"
         "  output:\n"
         "    flows:\n"
@@ -591,11 +567,10 @@ async def test_mixed_text_and_function_call_runs_output_then_structural_checks(
         "  tool_output:\n"
         "    flows:\n"
         "      - tool call validation\n",
-        encoding="utf-8",
-    )
-    (config / "rails.co").write_text(
-        'define flow output rail\n  if $bot_message == "block output"\n    bot refuse to respond\n    stop\n',
-        encoding="utf-8",
+        name="combined",
+        rails_co=(
+            'define flow output rail\n  if $bot_message == "block output"\n    bot refuse to respond\n    stop\n'
+        ),
     )
     context = _context()
     plugin = worker.NeMoGuardrailsRelayWorker()

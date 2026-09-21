@@ -10,24 +10,13 @@ from unittest.mock import MagicMock
 
 import pytest
 from nemoguardrails.rails.llm.options import RailStatus, RailType
+from provider_cases import guardrails_chat_request as _request
 
 from nemoguardrails_nemo_relay import (
     configuration,
     execution_policy,
     worker,
 )
-
-
-def _request(messages: list[dict[str, object]], **content: object) -> dict[str, object]:
-    return {
-        "headers": {"authorization": "not-forwarded-to-guardrails"},
-        "content": {
-            "model": "fixture-model",
-            "messages": messages,
-            **content,
-        },
-    }
-
 
 _ECHO_LATEST_USER = object()
 

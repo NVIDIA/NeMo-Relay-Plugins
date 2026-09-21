@@ -4,20 +4,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from nemo_relay_plugin import PluginContext
+from provider_cases import chat_request as _request
+from provider_cases import chat_response
 from registration_helpers import registered_llm_execution
+from worker_test_helpers import worker_context as _context
 
 from nemoguardrails_nemo_relay import configuration, execution_policy, worker
 from nemoguardrails_nemo_relay.check_backend import CheckResult, CheckStatus
-
-
-def _context() -> MagicMock:
-    context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(list_runtime_registrations=AsyncMock(return_value=[]))
-    return context
 
 
 def _config(*, phases: list[str]) -> dict[str, object]:
@@ -31,35 +27,6 @@ def _config(*, phases: list[str]) -> dict[str, object]:
             "header_env": {"Authorization": "REMOTE_GUARDRAILS_TOKEN"},
         },
         "secret_env": {"REMOTE_GUARDRAILS_TOKEN": "Bearer private-token"},
-    }
-
-
-def _request() -> dict[str, object]:
-    return {
-        "headers": {},
-        "content": {
-            "model": "fixture",
-            "messages": [{"role": "user", "content": "hello"}],
-            "response_format": {"type": "text"},
-        },
-    }
-
-
-def _response() -> dict[str, object]:
-    return {
-        "id": "chatcmpl-fixture",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "safe response",
-                    "function_call": None,
-                    "tool_calls": None,
-                },
-                "finish_reason": "stop",
-            }
-        ],
     }
 
 
@@ -99,13 +66,14 @@ async def test_remote_worker_runs_explicit_input_and_output_phases(
     plugin = worker.NeMoGuardrailsRelayWorker()
     await plugin.register(context, _config(phases=["input", "output"]))
     callback = registered_llm_execution(context).callback
-    next_call = SimpleNamespace(call=AsyncMock(return_value=_response()))
+    expected_response = chat_response("safe response")
+    next_call = SimpleNamespace(call=AsyncMock(return_value=expected_response))
     try:
         response = await callback("openai.chat_completions", _request(), next_call)
     finally:
         await plugin.close()
 
-    assert response == _response()
+    assert response == expected_response
     assert observed_headers == [{"Authorization": "Bearer private-token"}]
     assert [phase for _messages, phase in backend.calls] == ["input", "output"]
     assert backend.calls[0][0] == [{"role": "user", "content": "hello"}]
@@ -121,7 +89,7 @@ async def test_remote_worker_blocks_before_provider(monkeypatch: pytest.MonkeyPa
     plugin = worker.NeMoGuardrailsRelayWorker()
     await plugin.register(context, _config(phases=["input"]))
     callback = registered_llm_execution(context).callback
-    next_call = SimpleNamespace(call=AsyncMock(return_value=_response()))
+    next_call = SimpleNamespace(call=AsyncMock(return_value=chat_response("safe response")))
     try:
         with pytest.raises(execution_policy._LlmPolicyError, match="prevented execution"):
             await callback("openai.chat_completions", _request(), next_call)

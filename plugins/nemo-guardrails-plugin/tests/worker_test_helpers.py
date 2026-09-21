@@ -14,13 +14,18 @@ from registration_helpers import registered_llm_execution
 from nemoguardrails_nemo_relay import execution_policy, worker
 
 
-def worker_context(registrations: list[object] | None = None) -> MagicMock:
+def worker_context(
+    registrations: list[object] | None = None,
+    *,
+    emit_mark: AsyncMock | None = None,
+) -> MagicMock:
     """Create a Relay plugin context with a controllable runtime inventory."""
 
     context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(
-        list_runtime_registrations=AsyncMock(return_value=[] if registrations is None else registrations)
-    )
+    runtime = {"list_runtime_registrations": AsyncMock(return_value=[] if registrations is None else registrations)}
+    if emit_mark is not None:
+        runtime["emit_mark"] = emit_mark
+    context.runtime = SimpleNamespace(**runtime)
     return context
 
 

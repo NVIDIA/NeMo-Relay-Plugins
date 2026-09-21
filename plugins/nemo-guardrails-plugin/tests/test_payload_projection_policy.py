@@ -20,101 +20,6 @@ from nemoguardrails_nemo_relay import (
 
 
 @pytest.mark.parametrize(
-    ("payload", "response"),
-    [
-        (
-            chat_request(),
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "role": "assistant",
-                            "content": "safe",
-                            "reasoning_content": "private reasoning",
-                        },
-                        "finish_reason": "stop",
-                    }
-                ]
-            },
-        ),
-        (
-            responses_request(),
-            {
-                "id": "resp-1",
-                "object": "response",
-                "output": [
-                    {"type": "reasoning", "id": "rs-1", "summary": []},
-                    {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": "safe", "annotations": []}],
-                    },
-                ],
-            },
-        ),
-        (
-            anthropic_request(),
-            {
-                "type": "message",
-                "role": "assistant",
-                "content": [
-                    {"type": "thinking", "thinking": "private reasoning", "signature": "sig"},
-                    {"type": "text", "text": "safe"},
-                ],
-            },
-        ),
-        (
-            gemini_request(),
-            {
-                "candidates": [
-                    {
-                        "content": {
-                            "role": "model",
-                            "parts": [
-                                {"text": "private reasoning", "thought": True, "thoughtSignature": "sig"},
-                                {"text": "safe"},
-                            ],
-                        }
-                    }
-                ]
-            },
-        ),
-        (
-            oci_request(),
-            {
-                "chatResponse": {
-                    "apiFormat": "GENERIC",
-                    "choices": [
-                        {
-                            "message": {
-                                "role": "ASSISTANT",
-                                "content": [{"type": "TEXT", "text": "safe"}],
-                                "reasoningContent": "private reasoning",
-                            }
-                        }
-                    ],
-                }
-            },
-        ),
-    ],
-    ids=["chat", "responses", "anthropic", "gemini", "oci"],
-)
-def test_final_answer_only_policy_checks_text_and_preserves_reasoning(
-    payload: dict[str, object], response: dict[str, object]
-) -> None:
-    projector = codec_projection._ProviderProjector(
-        payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.FINAL_ANSWER_ONLY)
-    )
-    decoded = projector.project_text(payload, require_user=True)
-
-    assert projector.project_response_texts(
-        decoded,
-        response,
-        allow_tool_calls=False,
-    ).candidates == ("safe",)
-
-
-@pytest.mark.parametrize(
     ("payload", "response", "expected_reasoning"),
     [
         (
@@ -206,19 +111,26 @@ def test_final_answer_only_policy_checks_text_and_preserves_reasoning(
     ],
     ids=["chat", "responses", "anthropic", "gemini", "oci"],
 )
-def test_check_output_policy_projects_plaintext_reasoning_separately(
+def test_reasoning_policies_separate_plaintext_reasoning_from_the_final_answer(
     payload: dict[str, object],
     response: dict[str, object],
     expected_reasoning: tuple[str, ...],
 ) -> None:
-    projector = codec_projection._ProviderProjector(
+    check_output = codec_projection._ProviderProjector(
         payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.CHECK_OUTPUT)
     )
-    decoded = projector.project_text(payload, require_user=True)
+    decoded = check_output.project_text(payload, require_user=True)
 
-    projected = projector.project_response_texts(decoded, response, allow_tool_calls=False)
+    projected = check_output.project_response_texts(decoded, response, allow_tool_calls=False)
     assert projected.candidates == ("safe",)
     assert projected.reasoning == expected_reasoning
+
+    final_only = codec_projection._ProviderProjector(
+        payload_policy.PayloadPolicy(reasoning=payload_policy.ReasoningPolicy.FINAL_ANSWER_ONLY)
+    )
+    final = final_only.project_response_texts(decoded, response, allow_tool_calls=False)
+    assert final.candidates == ("safe",)
+    assert final.reasoning == ()
 
 
 @pytest.mark.parametrize(

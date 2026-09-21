@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from guardrails_config import write_guardrails_config
+from http_test_server import HttpRequest, loopback_http_server
+from provider_cases import guardrails_chat_request as _request
 from worker_test_helpers import registered_worker
 
 from nemoguardrails_nemo_relay import (
@@ -18,92 +19,53 @@ from nemoguardrails_nemo_relay import (
 )
 
 
-def _request(messages: list[dict[str, object]], **content: object) -> dict[str, object]:
-    return {
-        "headers": {"authorization": "not-forwarded-to-guardrails"},
-        "content": {
-            "model": "fixture-model",
-            "messages": messages,
-            **content,
-        },
-    }
-
-
 @pytest.fixture
 def evaluator_server() -> tuple[str, list[dict[str, object]]]:
     calls: list[dict[str, object]] = []
 
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_args: object) -> None:
-            return
-
-        def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP hook
-            body = self.rfile.read(int(self.headers["content-length"]))
-            parsed = json.loads(body)
-            calls.append(
-                {
-                    "path": self.path,
-                    "authorization": self.headers.get("authorization"),
-                    "body": parsed,
-                }
-            )
-            serialized = body.decode("utf-8")
-            status = 200
-            if "HTTP_500_EVALUATOR" in serialized:
-                status = 500
-                response = json.dumps({"error": {"message": "fixture evaluator failure"}}).encode("utf-8")
-            elif "AUTH_ERROR_EVALUATOR" in serialized:
-                status = 401
-                response = json.dumps({"error": {"message": "fixture evaluator authentication failure"}}).encode(
-                    "utf-8"
-                )
-            elif "SLOW_EVALUATOR" in serialized:
-                time.sleep(0.2)
-                response = b""
-            elif "MALFORMED_EVALUATOR" in serialized:
-                response = b"{not-json"
-            else:
-                verdict = "Yes" if "User input: BLOCK_EVALUATOR" in serialized else "No"
-                response = json.dumps(
+    def respond(request: HttpRequest) -> tuple[int, bytes]:
+        calls.append(
+            {
+                "path": request.path,
+                "authorization": request.headers.get("authorization"),
+                "body": json.loads(request.body),
+            }
+        )
+        serialized = request.body.decode("utf-8")
+        if "HTTP_500_EVALUATOR" in serialized:
+            return 500, json.dumps({"error": {"message": "fixture evaluator failure"}}).encode()
+        if "AUTH_ERROR_EVALUATOR" in serialized:
+            return 401, json.dumps({"error": {"message": "fixture evaluator authentication failure"}}).encode()
+        if "SLOW_EVALUATOR" in serialized:
+            time.sleep(0.2)
+            return 200, b""
+        if "MALFORMED_EVALUATOR" in serialized:
+            return 200, b"{not-json"
+        verdict = "Yes" if "User input: BLOCK_EVALUATOR" in serialized else "No"
+        return 200, json.dumps(
+            {
+                "id": "chatcmpl-local",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "local-evaluator",
+                "choices": [
                     {
-                        "id": "chatcmpl-local",
-                        "object": "chat.completion",
-                        "created": 0,
-                        "model": "local-evaluator",
-                        "choices": [
-                            {
-                                "index": 0,
-                                "message": {"role": "assistant", "content": verdict},
-                                "finish_reason": "stop",
-                            }
-                        ],
-                        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                        "index": 0,
+                        "message": {"role": "assistant", "content": verdict},
+                        "finish_reason": "stop",
                     }
-                ).encode("utf-8")
-            self.send_response(status)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(response)))
-            self.end_headers()
-            try:
-                self.wfile.write(response)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+        ).encode()
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.daemon_threads = True
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_address[1]}/v1", calls
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+    with loopback_http_server(respond) as endpoint:
+        yield f"{endpoint}/v1", calls
 
 
 def _write_evaluator_config(config_path: Path, base_url: str) -> None:
-    config_path.mkdir()
-    (config_path / "config.yml").write_text(
+    write_guardrails_config(
+        config_path.parent,
         f"""
 models:
   - type: main
@@ -124,7 +86,7 @@ prompts:
       User input: {{{{ user_input }}}}
 """.strip()
         + "\n",
-        encoding="utf-8",
+        name=config_path.name,
     )
 
 

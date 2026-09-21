@@ -4,91 +4,56 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 from collections.abc import Iterator
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from nemo_relay_plugin import PluginContext
+from guardrails_config import write_guardrails_config
+from http_test_server import HttpRequest, loopback_http_server
 from registration_helpers import registered_llm_execution
+from worker_test_helpers import worker_context
 
 from nemoguardrails_nemo_relay import configuration, execution_policy, worker
-
-
-def _context() -> MagicMock:
-    context = MagicMock(spec=PluginContext)
-    context.runtime = SimpleNamespace(list_runtime_registrations=AsyncMock(return_value=[]))
-    return context
 
 
 @pytest.fixture
 def action_server() -> Iterator[tuple[str, list[dict[str, object]]]]:
     calls: list[dict[str, object]] = []
 
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_args: object) -> None:
-            return
+    def respond(request: HttpRequest) -> tuple[int, bytes]:
+        body = json.loads(request.body)
+        calls.append(
+            {
+                "path": request.path,
+                "authorization": request.headers.get("authorization"),
+                "private_header": request.headers.get("x-private-secret"),
+                "body": body,
+            }
+        )
+        text = body.get("action_parameters", {}).get("text")
+        if text == "block":
+            return 200, json.dumps({"status": "success", "result": False}).encode()
+        if text == "action failure":
+            return 503, b"service unavailable"
+        if text == "malformed action":
+            return 200, b"{not-json"
+        if text == "slow action":
+            time.sleep(0.2)
+        return 200, json.dumps({"status": "success", "result": True}).encode()
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP hook
-            body = self.rfile.read(int(self.headers.get("content-length", "0")))
-            parsed = json.loads(body)
-            calls.append(
-                {
-                    "path": self.path,
-                    "authorization": self.headers.get("authorization"),
-                    "private_header": self.headers.get("x-private-secret"),
-                    "body": parsed,
-                }
-            )
-            text = parsed.get("action_parameters", {}).get("text")
-            status = 200
-            if text == "allow":
-                response = json.dumps({"status": "success", "result": True}).encode()
-            elif text == "block":
-                response = json.dumps({"status": "success", "result": False}).encode()
-            elif text == "action failure":
-                status = 503
-                response = b"service unavailable"
-            elif text == "malformed action":
-                response = b"{not-json"
-            elif text == "slow action":
-                time.sleep(0.2)
-                response = json.dumps({"status": "success", "result": True}).encode()
-            else:
-                response = json.dumps({"status": "success", "result": True}).encode()
-            self.send_response(status)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(response)))
-            self.end_headers()
-            try:
-                self.wfile.write(response)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        host, port = server.server_address
-        yield f"http://{host}:{port}", calls
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+    with loopback_http_server(respond) as endpoint:
+        yield endpoint, calls
 
 
 def _write_remote_action_config(path: Path, endpoint: str) -> None:
-    path.mkdir()
-    (path / "config.yml").write_text(
+    write_guardrails_config(
+        path.parent,
         f"actions_server_url: {endpoint}\nrails:\n  input:\n    flows:\n      - remote action rail\n",
-        encoding="utf-8",
-    )
-    (path / "rails.co").write_text(
-        """
+        name=path.name,
+        rails_co="""
 define bot refuse
   "blocked"
 
@@ -99,10 +64,7 @@ define flow remote action rail
     stop
 """.strip()
         + "\n",
-        encoding="utf-8",
-    )
-    (path / "config.py").write_text(
-        """
+        config_py="""
 from nemoguardrails.actions import action
 
 @action(name="remote_policy_action")
@@ -113,7 +75,6 @@ def init(app: object) -> None:
     app.register_action(remote_policy_action)
 """.strip()
         + "\n",
-        encoding="utf-8",
     )
 
 
@@ -124,7 +85,7 @@ async def test_real_action_server_allow_block_failure_malformed_timeout_and_reco
     endpoint, calls = action_server
     config = tmp_path / "remote-actions"
     _write_remote_action_config(config, endpoint)
-    context = _context()
+    context = worker_context()
     plugin = worker.NeMoGuardrailsRelayWorker()
     await plugin.register(
         context,
