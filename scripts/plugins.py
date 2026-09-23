@@ -28,7 +28,7 @@ from scripts.catalog import (
     tag_plugin,
 )
 from scripts.github import GitHub
-from scripts.host import checkout, install_host, resolve_host
+from scripts.host import checkout, install_host, resolve_host, resolve_tag
 from scripts.releases import publish_draft, release_notes
 
 
@@ -63,6 +63,7 @@ def make_plan(
         )
     else:
         selected = select(manifests, changed_paths(event.get("before"), head, root=root))
+    validate_source_tag_pins(selected, github)
     hosts = {}
     resolutions = {}
     matrix = []
@@ -82,6 +83,25 @@ def make_plan(
                 }
             )
     return {"commit": head, "ref": ref, "matrix": {"include": matrix}, "hosts": hosts}
+
+
+def validate_source_tag_pins(manifests: list[dict], github: GitHub) -> None:
+    """Ensure remote source tags resolve to their committed source SHA."""
+    prefix = "refs/tags/"
+    for manifest in manifests:
+        source = manifest["source"]
+        ref = source.get("ref", "")
+        if source["location"] != "remote" or not ref.startswith(prefix):
+            continue
+        repository = source["repository"].removeprefix("https://github.com/")
+        tag = ref.removeprefix(prefix)
+        resolved = resolve_tag(tag, github, repository)
+        pinned = source["sha"]
+        if resolved != pinned:
+            raise ValueError(
+                f"{manifest['name']} source tag {tag!r} resolves to {resolved}, "
+                f"but source.sha pins {pinned}"
+            )
 
 
 def expand(argv: list[str], env: dict[str, str]) -> list[str]:

@@ -50,7 +50,10 @@ uv run --locked python -m scripts.plugins run switchyard-plugin
 
 This command builds the plugin, runs Switchyard’s plugin tests, and uses its package script to create a bundle. It then extracts and installs the bundle for tests. These tests send a routed request to a local server, check shutdown and removal, and confirm that Relay rejects changed files. CI requires tests to pass on all five supported platforms.
 
-To use newer Switchyard code, update `source.sha` to the commit you want. `source.ref` records the branch or tag you plan to track; it does not update the source on its own.
+To use newer Switchyard code, update `source.sha` to the commit you want. Set
+`source.ref` to a branch name or to `refs/tags/<tag>`. Planning checks that a
+tag resolves to the pinned commit. The ref records what to track; it does not
+update the source on its own.
 
 The release version here is separate from the Switchyard workspace version.
 SDK package versions come from Switchyard's Cargo lockfile. A `[relay]` setting

@@ -21,7 +21,7 @@ PLATFORMS = {
     "windows-arm64": {"runner": "windows-11-arm", "target": "aarch64-pc-windows-msvc"},
     "macos-arm64": {"runner": "macos-15", "target": "aarch64-apple-darwin"},
 }
-SHARED_PREFIXES = ("scripts/", "schemas/", "tests/", ".github/workflows/", ".github/actions/")
+SHARED_PREFIXES = ("scripts/", "schemas/", ".github/workflows/", ".github/actions/")
 SHARED_FILES = {
     "pyproject.toml",
     "uv.lock",
