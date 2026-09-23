@@ -56,7 +56,7 @@ def test_invalid_manifests(catalog, mutate):
 
 def test_remote_selector_has_committed_sha(catalog):
     m = discover(catalog)["switchyard-plugin"]
-    assert m["source"]["ref"] == "main"
+    assert m["source"]["ref"] == "v0.3.0"
     assert len(m["source"]["sha"]) == 40
 
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 schema_version = 1
 name = "switchyard-plugin"
-version = "0.2.0"
+version = "0.3.0"
 type = "native"
 
 [metadata]
@@ -9,14 +9,14 @@ description = "Switchyard routing plugin for NeMo Relay"
 license = "Apache-2.0"
 authors = ["NVIDIA Corporation"]
 repository = "https://github.com/NVIDIA-NeMo/Switchyard"
-documentation = "https://github.com/NVIDIA-NeMo/Switchyard/tree/main/crates/switchyard-nemo-relay-plugin"
+documentation = "https://github.com/NVIDIA-NeMo/Switchyard/tree/v0.3.0/crates/switchyard-nemo-relay-plugin"
 
 [source]
 location = "remote"
 path = "crates/switchyard-nemo-relay-plugin"
 repository = "https://github.com/NVIDIA-NeMo/Switchyard"
-ref = "main"
-sha = "8dc891195a5fa71350f5a03c19f9eecc0f9fcb09"
+ref = "v0.3.0"
+sha = "336196f6fbfc97ddc71c1700f6092e564e9f23c2"
 
 [toolchains]
 python = "3.11"
