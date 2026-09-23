@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
 """Locked inventories and verified license sources must survive regeneration."""
 
 import io
@@ -195,6 +197,25 @@ def test_wheel_license_is_rendered_in_relay_format():
     assert "## example (1.0)\n\n### Licenses\nLicense: `MIT`" in text
     assert "`licenses/LICENSE`" in text
     assert license_text in text
+
+
+def test_wheel_license_can_live_at_the_import_package_root():
+    data = io.BytesIO()
+    license_text = "Copyright Example Authors\nPermission granted.\n"
+    with zipfile.ZipFile(data, "w") as wheel:
+        wheel.writestr(
+            "example-1.0.dist-info/METADATA",
+            "Name: example\nVersion: 1.0\nLicense-Expression: MIT\n",
+        )
+        wheel.writestr("example/LICENSE", license_text)
+        wheel.writestr("unrelated/LICENSE", "Unrelated dependency license")
+
+    license_name, texts = attribution._wheel_metadata_from_bytes(
+        data.getvalue(), package_name="example"
+    )
+
+    assert license_name == "MIT"
+    assert texts == [("LICENSE", license_text.rstrip())]
 
 
 def test_rust_upstream_fallback_uses_publication_commit(tmp_path, monkeypatch):
