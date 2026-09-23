@@ -1,4 +1,8 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Releasing one plugin
 
 Release one plugin at a time. Each release has one Git tag and one draft GitHub Release. The repository has no shared version or command to tag several plugins at once.

@@ -702,14 +702,20 @@ def _declared_wheel_license_texts(
 
 
 def _heuristic_wheel_license_texts(
-    zf: zipfile.ZipFile, dist_info_dir: str
+    zf: zipfile.ZipFile, dist_info_dir: str, package_name: str
 ) -> list[tuple[str, str]]:
     """Return a fallback wheel license file when metadata does not declare one."""
+    normalized_package = _normalize_package_name(package_name)
     heuristic_paths = _common_license_candidates(
         [
             name
             for name in zf.namelist()
-            if name.startswith(f"{dist_info_dir}/licenses/") or name.startswith(f"{dist_info_dir}/")
+            if name.startswith(f"{dist_info_dir}/licenses/")
+            or name.startswith(f"{dist_info_dir}/")
+            or (
+                name.count("/") == 1
+                and _normalize_package_name(name.split("/", 1)[0]) == normalized_package
+            )
         ]
     )
     heuristic_candidates: list[tuple[str, str, str]] = []
@@ -739,7 +745,7 @@ def _wheel_metadata_from_bytes(
         )
         if not license_texts:
             # Older wheels often omit License-File entries but still bundle a LICENSE-like file.
-            license_texts = _heuristic_wheel_license_texts(zf, dist_info_dir)
+            license_texts = _heuristic_wheel_license_texts(zf, dist_info_dir, package_name)
         return license_name, license_texts
 
 
