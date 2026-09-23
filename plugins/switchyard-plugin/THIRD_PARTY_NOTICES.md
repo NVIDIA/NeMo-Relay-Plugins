@@ -2,7 +2,7 @@
 # Switchyard plugin third-party notices
 
 This plugin is built from [NVIDIA-NeMo/Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)
-at commit `8dc891195a5fa71350f5a03c19f9eecc0f9fcb09`, using the
+at commit `336196f6fbfc97ddc71c1700f6092e564e9f23c2`, using the
 `crates/switchyard-nemo-relay-plugin` Rust package and the other workspace packages it uses.
 
 Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
