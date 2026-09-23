@@ -58,7 +58,7 @@ def test_invalid_manifests(catalog, mutate):
 
 def test_remote_selector_has_committed_sha(catalog):
     m = discover(catalog)["switchyard-plugin"]
-    assert m["source"]["ref"] == "main"
+    assert m["source"]["ref"] == "refs/tags/v0.3.0"
     assert len(m["source"]["sha"]) == 40
 
 
@@ -74,6 +74,7 @@ def test_hyphenated_tags_and_prereleases(catalog):
 def test_shared_and_local_changes(catalog):
     manifests = discover(catalog)
     assert select(manifests, ["README.md"]) == []
+    assert select(manifests, ["tests/test_catalog.py"]) == []
     assert len(select(manifests, ["scripts/new.py"])) == 4
     assert len(select(manifests, ["uv.lock"])) == 4
     assert len(select(manifests, None)) == 4
@@ -109,8 +110,34 @@ def test_pr_diff_uses_merge_base(repo):
     assert paths == [f"plugins/{NAME}/new.py"]
 
 
+def test_test_only_pull_request_has_no_plugin_build_plan(repo, monkeypatch):
+    root, git, commit = repo
+    base = git("rev-parse", "HEAD")
+    head = commit("tests/test_new_case.py")
+    event = {
+        "pull_request": {
+            "base": {"sha": base},
+            "head": {"sha": head},
+        }
+    }
+    monkeypatch.setattr(
+        "scripts.plugins.resolve_tag",
+        lambda *args: pytest.fail("test-only changes must not resolve plugin tags"),
+    )
+    monkeypatch.setattr(
+        "scripts.plugins.resolve_host",
+        lambda *args: pytest.fail("test-only changes must not resolve Relay hosts"),
+    )
+
+    plan = make_plan(discover(root), event, "pull_request", "refs/pull/1/merge", head, None, root)
+    assert plan["matrix"]["include"] == []
+    assert plan["hosts"] == {}
+
+
 def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     calls = []
+    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
+    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
     monkeypatch.setattr(
         "scripts.plugins.resolve_host",
         lambda selector, github: calls.append(selector) or {"sha": "a" * 40},
@@ -130,6 +157,8 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
 
 def test_plan_resolves_shared_override_and_default_host_separately(catalog, monkeypatch):
     calls = []
+    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
+    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
 
     def resolve(selector, github):
         calls.append(selector)
@@ -143,6 +172,55 @@ def test_plan_resolves_shared_override_and_default_host_separately(catalog, monk
     assert calls == [{"sha": "b" * 40}, {}]
     for name, manifest in manifests.items():
         assert plan["hosts"][name]["sha"] == manifest["relay"].get("sha", "a" * 40)
+
+
+def test_plan_rejects_source_tag_sha_mismatch(catalog, monkeypatch):
+    manifest = discover(catalog)["switchyard-plugin"]
+    resolved = "a" * 40
+    pinned = manifest["source"]["sha"]
+    calls = []
+
+    def resolve_tag(tag, github, repository):
+        calls.append((tag, repository))
+        return resolved
+
+    monkeypatch.setattr("scripts.plugins.resolve_tag", resolve_tag)
+    monkeypatch.setattr("scripts.plugins.resolve_host", lambda *args: {"sha": "b" * 40})
+
+    with pytest.raises(ValueError) as error:
+        make_plan(
+            {"switchyard-plugin": manifest},
+            {},
+            "push",
+            "refs/heads/main",
+            "c" * 40,
+            None,
+            catalog,
+        )
+    assert resolved in str(error.value)
+    assert pinned in str(error.value)
+    assert calls == [("v0.3.0", "NVIDIA-NeMo/Switchyard")]
+
+
+def test_plan_skips_source_sha_validation_for_branch_refs(catalog, monkeypatch):
+    manifest = discover(catalog)["switchyard-plugin"]
+    manifest["source"]["ref"] = "main"
+    monkeypatch.setattr(
+        "scripts.plugins.resolve_tag",
+        lambda *args: pytest.fail("branch refs must not be resolved as tags"),
+    )
+    monkeypatch.setattr("scripts.plugins.resolve_host", lambda *args: {"sha": "a" * 40})
+
+    plan = make_plan(
+        {"switchyard-plugin": manifest},
+        {},
+        "push",
+        "refs/heads/main",
+        "b" * 40,
+        None,
+        catalog,
+    )
+    assert plan["matrix"]["include"]
 
 
 def test_commands_are_argument_arrays():
