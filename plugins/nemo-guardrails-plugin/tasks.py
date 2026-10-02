@@ -88,6 +88,11 @@ def package(ctx: Context) -> None:
         "README.md",
     ]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
+    shutil.copytree(
+        ctx.source / "examples",
+        ctx.bundle / "examples",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
     write_runtime_manifest(ctx.bundle, manifest)
     write_attributions(ctx)

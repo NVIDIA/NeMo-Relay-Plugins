@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+rails:
+  tool_input:
+    flows:
+      - tool result validation
+  tool_output:
+    flows:
+      - tool call validation
