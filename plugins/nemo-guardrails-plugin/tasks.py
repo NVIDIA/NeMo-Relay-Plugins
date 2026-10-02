@@ -86,6 +86,7 @@ def package(ctx: Context) -> None:
         "LICENSE",
         "NOTICE",
         "README.md",
+        "MIGRATION.md",
     ]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
     shutil.copytree(
