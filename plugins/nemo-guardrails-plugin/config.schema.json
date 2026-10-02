@@ -1,0 +1,214 @@
+{
+  "$comment": "SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NeMo Guardrails for NeMo Relay",
+  "description": "Configures one NeMo Guardrails LLM execution policy backed by an in-process configuration or a Guardrails /v1/checks service.",
+  "type": "object",
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": ["config_path"],
+      "not": {"required": ["remote_checks"]}
+    },
+    {
+      "required": ["remote_checks"],
+      "not": {"required": ["config_path"]}
+    }
+  ],
+  "properties": {
+    "version": {
+      "description": "Integration configuration schema version.",
+      "type": "integer",
+      "const": 2,
+      "default": 2
+    },
+    "config_path": {
+      "description": "Absolute path to a complete NeMo Guardrails configuration directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "remote_checks": {
+      "description": "Use a separately operated Guardrails 0.24 /v1/checks service for explicit input and/or output text checks. The stock 0.24 server logs checked content because it constructs LLMRails in verbose mode and keeps content-bearing conversation events in an in-process history cache. Structural tool rails and Guardrails-owned generation are not available in this mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "config_ids", "phases", "model", "allow_remote_content_logging_and_retention"],
+      "properties": {
+        "endpoint": {
+          "description": "HTTPS server base URL or /v1/checks URL. Plain HTTP is accepted only for a loopback address.",
+          "type": "string",
+          "minLength": 1
+        },
+        "config_ids": {
+          "description": "Guardrails server configuration IDs to combine.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 256}
+        },
+        "phases": {
+          "description": "Explicit Guardrails check phases to enforce.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "enum": ["input", "output"]}
+        },
+        "model": {
+          "description": "Evaluator model sent to Guardrails. The /v1/checks server replaces the selected configuration's main model with this value, so it must be chosen deliberately.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "allow_remote_content_logging_and_retention": {
+          "description": "Required acknowledgement that the stock Guardrails 0.24 /v1/checks server writes checked conversation content to its logs even when CLI verbose mode is disabled and retains content-bearing conversation events in process memory for the life of its cached LLMRails instance.",
+          "type": "boolean",
+          "const": true
+        },
+        "header_env": {
+          "description": "HTTP header names mapped to worker environment variable names. Secret values are resolved only inside the worker process.",
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {"pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$"},
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+          },
+          "default": {}
+        },
+        "timeout_ms": {
+          "description": "Per-request HTTP timeout for the remote Guardrails service.",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 25000,
+          "default": 25000
+        },
+        "max_response_bytes": {
+          "description": "Maximum accepted /v1/checks response size.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1048576,
+          "default": 65536
+        }
+      }
+    },
+    "check_timeout_ms": {
+      "description": "Cooperative timeout covering queue wait and Guardrails work for one phase. Synchronous custom actions cannot be preempted.",
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 25000,
+      "default": 25000
+    },
+    "secret_env": {
+      "description": "Environment variables supplied only to this worker process while it validates and runs Guardrails. Values are sensitive configuration and are not copied into diagnostics. Relay stores this map in its plugin configuration, so protect that file and use only variables required by the Guardrails deployment.",
+      "type": "object",
+      "default": {},
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "writeOnly": true
+      }
+    },
+    "payload_policy": {
+      "description": "Explicit coverage policy for recognized non-text and private reasoning fields. Native payloads are preserved; text_only and final_answer_only leave those recognized fields outside the text-rail decision. check_output sends recognized plaintext reasoning through output rails without permitting mutation.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "multimodal": {
+          "description": "strict rejects recognized non-text content; text_only checks all covered text while preserving recognized non-text content unchanged.",
+          "type": "string",
+          "enum": ["strict", "text_only"],
+          "default": "strict"
+        },
+        "reasoning": {
+          "description": "reject refuses recognized private reasoning; final_answer_only checks only covered final-answer candidates; check_output separately checks each recognized plaintext reasoning segment and every final-answer candidate while preserving reasoning unchanged. Redacted or encrypted reasoning rejects in check_output mode.",
+          "type": "string",
+          "enum": ["reject", "final_answer_only", "check_output"],
+          "default": "reject"
+        }
+      },
+      "default": {}
+    },
+    "mutation_policy": {
+      "description": "Controls Guardrails MODIFIED results independently for input and output. reject is the default. apply rewrites only a single provable native scalar or text leaf; ambiguous, multipart, oversized, streaming-output, tool-only, and reasoning-only payloads still fail closed.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "description": "reject blocks a modified prompt. apply sends a losslessly rewritten native request to the provider.",
+          "type": "string",
+          "enum": ["reject", "apply"],
+          "default": "reject"
+        },
+        "output": {
+          "description": "reject blocks a modified unary response. apply returns a losslessly rewritten native response. Guarded streaming output remains unsupported.",
+          "type": "string",
+          "enum": ["reject", "apply"],
+          "default": "reject"
+        }
+      },
+      "default": {}
+    },
+    "semantic_tool_policy": {
+      "description": "Opt in to plugin-owned semantic checks for JSON tool arguments or results. This is separate from Guardrails structural tool rails. Arguments use configured input rails; results use configured output rails. Native JSON is never rewritten.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "check_arguments": {
+          "description": "Check bounded canonical tool name and argument JSON before continuing the Relay tool execution chain. Inner tool middleware must be trusted not to replace checked arguments.",
+          "type": "boolean",
+          "default": false
+        },
+        "result_source": {
+          "description": "Select where result JSON is checked. execution checks the result visible after the inner Relay tool execution chain. Equal-priority outer middleware must be trusted not to replace it afterward. history checks prior results in LLM transcripts for integrations that do not use Relay's tool lifecycle. both explicitly accepts duplicate checks when the same result later appears in history.",
+          "type": "string",
+          "enum": ["off", "execution", "history", "both"],
+          "default": "off"
+        },
+        "max_payload_bytes": {
+          "description": "Maximum UTF-8 size of one canonical argument or result document sent to text rails.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1048576,
+          "default": 65536
+        }
+      },
+      "default": {}
+    },
+    "evaluator_framework": {
+      "description": "Model-provider adapter used by local LLM-backed rails. default supports OpenAI-compatible evaluators, including NVIDIA NIM. langchain is accepted only for native Anthropic evaluators and requires compatible LangChain packages supplied by a custom build; those packages are not included in the standard archive.",
+      "type": "string",
+      "enum": ["default", "langchain"],
+      "default": "default"
+    },
+    "action_safety": {
+      "description": "Controls trusted custom actions loaded from local Guardrails configuration. Synchronous actions execute on the worker event loop in Guardrails 0.24 and are rejected by default because they cannot be interrupted by an async timeout.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "synchronous": {
+          "description": "reject fails activation for custom synchronous actions. allow_unsafe is an explicit acknowledgement that one blocking action can stall the worker.",
+          "type": "string",
+          "enum": ["reject", "allow_unsafe"],
+          "default": "reject"
+        }
+      },
+      "default": {}
+    },
+    "allow_ignored_rail_families": {
+      "description": "Acknowledge that configured retrieval flows, canonical dialog configuration that remains after top-level flow validation, and unsupported nonstandard tool rail flows will not run in this worker. This acknowledgement does not allow input or output rails that require unavailable retrieval or generation context. Ordinary unary output flows are supported; Guardrails streaming-output settings are rejected.",
+      "type": "boolean",
+      "default": false
+    },
+    "allow_known_fail_open_rails": {
+      "description": "Acknowledge Guardrails 0.24 input or output rails that can turn evaluator or service failures into an allow result.",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}
