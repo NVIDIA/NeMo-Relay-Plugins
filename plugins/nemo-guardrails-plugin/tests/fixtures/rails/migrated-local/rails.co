@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+define bot refuse
+  "blocked"
+
+define flow migrated input rail
+  $allowed = execute legacy_marker_check(text=$user_message)
+  if not $allowed
+    bot refuse
+    stop
