@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 from urllib.parse import quote
+from urllib.request import urlopen
 
 from scripts.catalog import PLATFORMS
 from scripts.github import GitHub
@@ -59,9 +63,29 @@ def resolve_host(selector: dict, github: GitHub) -> dict:
 def checkout(repository: str, sha: str, destination: Path):
     destination.mkdir(parents=True, exist_ok=False)
     subprocess.run(["git", "init", str(destination)], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(
-        ["git", "-C", str(destination), "fetch", "--depth=1", repository, sha], check=True
-    )
+    fetch = ["git", "-C", str(destination), "fetch", "--depth=1", repository, sha]
+    for attempt in range(3):
+        try:
+            subprocess.run(fetch, check=True, stderr=subprocess.PIPE, text=True)
+            break
+        except subprocess.CalledProcessError as error:
+            message = error.stderr or ""
+            print(message, file=sys.stderr, end="")
+            transient = any(
+                marker in message.lower()
+                for marker in (
+                    "failed to connect",
+                    "could not connect",
+                    "could not resolve host",
+                    "connection reset",
+                    "connection timed out",
+                    "tls connection was",
+                    "requested url returned error: 50",
+                )
+            )
+            if not transient or attempt == 2:
+                raise
+            time.sleep(2**attempt)
     subprocess.run(
         ["git", "-C", str(destination), "checkout", "--detach", "FETCH_HEAD"],
         check=True,
@@ -74,31 +98,42 @@ def checkout(repository: str, sha: str, destination: Path):
         raise ValueError(f"checkout mismatch: expected {sha}, got {actual}")
 
 
-def install_host(resolution: dict, platform: str, destination: Path) -> Path:
+def install_host(
+    resolution: dict, platform: str, destination: Path, *, dynamic_musl: bool = False
+) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     suffix = ".exe" if platform.startswith("windows") else ""
     binary = destination / ("nemo-relay" + suffix)
     version = (resolution["tag"] or "").removeprefix("v")
     asset = f"nemo-relay-cli-{PLATFORMS[platform]['target']}-{version}{suffix}"
     assets = {a["name"] for a in resolution["assets"]}
-    if asset in assets and asset + ".sha256" in assets:
-        subprocess.run(
-            [
-                "gh",
-                "release",
-                "download",
-                resolution["tag"],
-                "--repo",
-                REPOSITORY,
-                "--pattern",
-                asset,
-                "--pattern",
-                asset + ".sha256",
-                "--dir",
-                str(destination),
-            ],
-            check=True,
-        )
+    if not dynamic_musl and asset in assets and asset + ".sha256" in assets:
+        if shutil.which("gh"):
+            subprocess.run(
+                [
+                    "gh",
+                    "release",
+                    "download",
+                    resolution["tag"],
+                    "--repo",
+                    REPOSITORY,
+                    "--pattern",
+                    asset,
+                    "--pattern",
+                    asset + ".sha256",
+                    "--dir",
+                    str(destination),
+                ],
+                check=True,
+            )
+        else:
+            # Public release assets can be fetched inside minimal Linux images
+            # without installing a second GitHub CLI.
+            for filename in [asset, asset + ".sha256"]:
+                entry = next(a for a in resolution["assets"] if a["name"] == filename)
+                with urlopen(entry["browser_download_url"], timeout=120) as response:
+                    with (destination / filename).open("wb") as output:
+                        shutil.copyfileobj(response, output)
         artifact = destination / asset
         digest = (destination / (asset + ".sha256")).read_text(encoding="utf-8").split()[0]
         if hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
@@ -107,20 +142,28 @@ def install_host(resolution: dict, platform: str, destination: Path) -> Path:
     else:
         source = destination / "source"
         checkout(f"https://github.com/{REPOSITORY}.git", resolution["sha"], source)
+        target = PLATFORMS[platform]["target"] if platform.startswith("linux-") else None
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"CARGO_TARGET_DIR", "RUSTUP_TOOLCHAIN", "CARGO_BUILD_TARGET"}
+        }
+        if dynamic_musl:
+            # Static musl executables cannot load native plugin shared libraries.
+            env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+            env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " -C target-feature=-crt-static"
         # The pinned source's rust-toolchain.toml selects the host build toolchain.
         subprocess.run(
-            ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli"],
+            ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli"]
+            + (["--target", target] if target else []),
             cwd=source,
             check=True,
-            env={
-                k: v
-                for k, v in os.environ.items()
-                if k not in {"CARGO_TARGET_DIR", "RUSTUP_TOOLCHAIN"}
-            },
+            env=env,
         )
-        import shutil
-
-        shutil.copy2(source / "target/release" / ("nemo-relay" + suffix), binary)
+        artifact_dir = source / "target"
+        if target:
+            artifact_dir /= target
+        shutil.copy2(artifact_dir / "release" / ("nemo-relay" + suffix), binary)
     binary.chmod(0o755)
     subprocess.run([str(binary), "--version"], check=True)
     return binary.resolve()

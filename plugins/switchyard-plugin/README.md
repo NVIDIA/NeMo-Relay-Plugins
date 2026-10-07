@@ -48,7 +48,7 @@ From this repository's root:
 uv run --locked python -m scripts.plugins run switchyard-plugin
 ```
 
-This command builds the plugin, runs Switchyard’s plugin tests, and uses its package script to create a bundle. It then extracts and installs the bundle for tests. These tests send a routed request to a local server, check shutdown and removal, and confirm that Relay rejects changed files. CI requires tests to pass on all five supported platforms.
+This command builds the plugin, runs Switchyard’s plugin tests, and uses its package script to create a bundle. It then extracts and installs the bundle for tests. These tests send a routed request to a local server, check shutdown and removal, and confirm that Relay rejects changed files. CI requires tests to pass on all seven supported platforms.
 
 To use newer Switchyard code, update `source.sha` to the commit you want. Set
 `source.ref` to a branch name or to `refs/tags/<tag>`. Planning checks that a

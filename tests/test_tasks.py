@@ -51,6 +51,8 @@ def test_context_uses_registration_metadata_without_known_plugin_name(tmp_path, 
     assert context.source == tmp_path / "checkout" / "nested-crate"
     assert context.source_root == tmp_path / "checkout"
     assert context.bundle == tmp_path / "output" / "custom-distribution"
+    monkeypatch.setenv("CARGO_BUILD_TARGET", "aarch64-unknown-linux-musl")
+    assert Context.from_environment().target == tmp_path / "target/aarch64-unknown-linux-musl"
 
 
 def test_run_preserves_argument_boundaries_and_explicit_directory(tmp_path):

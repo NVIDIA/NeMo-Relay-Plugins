@@ -95,6 +95,8 @@ def test_duplicates_rejected(tmp_path):
 
 
 def assets_for(manifest, root, commit):
+    from scripts.catalog import LINUX_IMAGES, PLATFORMS
+
     root.mkdir(exist_ok=True)
     for platform in manifest["platforms"]:
         name = archive_name(manifest, platform)
@@ -112,6 +114,14 @@ def assets_for(manifest, root, commit):
             "relay": {"sha": "b" * 40},
             "verified": True,
             "sha256": digest,
+            "build_image": LINUX_IMAGES.get(platform)
+            if manifest["toolchains"].get("rust")
+            else None,
+            "rust_target": PLATFORMS[platform]["target"]
+            if manifest["toolchains"].get("rust")
+            else None,
+            "dynamic_musl_host": manifest["type"] == "native"
+            and platform.startswith("linux-musl-"),
         }
         (root / (name + ".json")).write_text(json.dumps(metadata))
         (root / (name + ".sha256")).write_text(f"{digest}  {name}\n")
@@ -123,7 +133,7 @@ def test_complete_asset_set_required(catalog, tmp_path):
     manifest = discover(catalog)["example-rust-native-plugin"]
     root = tmp_path / "assets"
     assets_for(manifest, root, "a" * 40)
-    assert len(verify_assets(manifest, root, "a" * 40)) == 15
+    assert len(verify_assets(manifest, root, "a" * 40)) == 21
     with pytest.raises(ValueError, match="identity"):
         verify_assets(manifest, root, "c" * 40)
     extra = root / "other-plugin.zip"
@@ -140,3 +150,27 @@ def test_complete_asset_set_required(catalog, tmp_path):
     metadata.unlink()
     with pytest.raises(FileNotFoundError):
         verify_assets(manifest, root, "a" * 40)
+
+
+@pytest.mark.parametrize(
+    "platform,field,value,reason",
+    [
+        ("linux-x86_64", "build_image", None, "compatibility image"),
+        ("linux-musl-arm64", "rust_target", "aarch64-unknown-linux-gnu", "compatibility image"),
+        ("linux-musl-x86_64", "dynamic_musl_host", False, "dynamic musl host"),
+    ],
+)
+def test_release_rejects_incompatible_linux_builds(
+    catalog, tmp_path, platform, field, value, reason
+):
+    from scripts.catalog import discover
+
+    manifest = discover(catalog)["example-rust-native-plugin"]
+    assets = tmp_path / "assets"
+    assets_for(manifest, assets, "a" * 40)
+    metadata = assets / (archive_name(manifest, platform) + ".json")
+    data = json.loads(metadata.read_text())
+    data[field] = value
+    metadata.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match=reason):
+        verify_assets(manifest, assets, "a" * 40)
