@@ -193,6 +193,17 @@ def run_plugin(
         if dynamic_musl:
             env.pop("CARGO_ENCODED_RUSTFLAGS", None)
             env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " -C target-feature=-crt-static"
+        elif manifest["type"] == "native" and platform.startswith("linux-"):
+            # glibc 2.17 lacks __cxa_thread_atexit_impl. Rust's fallback TLS
+            # destructors can otherwise jump into unmapped code after dlclose.
+            flags = ["-C", "link-arg=-Wl,-z,nodelete"]
+            if "CARGO_ENCODED_RUSTFLAGS" in env:
+                existing = env["CARGO_ENCODED_RUSTFLAGS"]
+                env["CARGO_ENCODED_RUSTFLAGS"] = (
+                    existing + "\x1f" if existing else ""
+                ) + "\x1f".join(flags)
+            else:
+                env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " " + " ".join(flags)
 
     def stage(which):
         command = manifest["commands"][which]

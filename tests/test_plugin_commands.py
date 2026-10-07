@@ -7,10 +7,26 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from scripts import plugins
 
 
-def test_unrelated_plugin_owns_every_stage(tmp_path, monkeypatch):
+@pytest.mark.parametrize("encoded", [None, "", "-C\x1fopt-level=2"])
+@pytest.mark.parametrize(
+    "kind,platform,rust,flag",
+    [
+        ("worker", plugins.local_platform(), None, ""),
+        ("native", "linux-x86_64", "1.96.1", "link-arg=-Wl,-z,nodelete"),
+        ("native", "linux-arm64", "1.96.1", "link-arg=-Wl,-z,nodelete"),
+        ("native", "linux-musl-x86_64", "1.96.1", "target-feature=-crt-static"),
+        ("native", "linux-musl-arm64", "1.96.1", "target-feature=-crt-static"),
+        ("worker", "linux-x86_64", "1.96.1", ""),
+    ],
+)
+def test_unrelated_plugin_owns_every_stage(
+    tmp_path, monkeypatch, kind, platform, rust, flag, encoded
+):
     name = "unrelated-custom-plugin"
     folder = tmp_path / "plugins" / name
     folder.mkdir(parents=True)
@@ -22,6 +38,15 @@ stage = sys.argv[1]
 plugin = Path(os.environ["PLUGIN_DIR"])
 assert Path.cwd() == plugin
 assert sys.argv[2] == "literal argument with spaces"
+flags = os.environ.get("RUSTFLAGS", "") + os.environ.get("CARGO_ENCODED_RUSTFLAGS", "")
+expected_flag = os.environ["EXPECTED_RUST_FLAG"]
+if expected_flag:
+    assert expected_flag in flags
+    if "nodelete" in expected_flag and os.environ.get("EXPECTED_ENCODED"):
+        assert os.environ["EXPECTED_ENCODED"] in flags
+else:
+    assert "nodelete" not in flags and "crt-static" not in flags
+native = os.environ["EXPECTED_KIND"] == "native"
 with (plugin / "stages").open("a") as log:
     log.write(stage + "\\n")
 if stage == "package":
@@ -30,10 +55,12 @@ if stage == "package":
     (bundle / "custom-worker").write_bytes(b"custom artifact")
     (bundle / "ATTRIBUTIONS.md").write_text("Fixture license text")
     digest = hashlib.sha256(b"custom artifact").hexdigest()
+    runtime_kind = "rust_dynamic" if native else "worker"
+    load = 'library = "custom-worker"' if native else 'runtime = "rust"\\nentrypoint = "custom-worker"'
     (bundle / "runtime.toml").write_text(
-        '[plugin]\\nkind = "worker"\\nid = "custom.runtime"\\n'
+        '[plugin]\\nkind = "' + runtime_kind + '"\\nid = "custom.runtime"\\n'
         '[source]\\nartifact = "custom-worker"\\n'
-        '[load]\\nruntime = "rust"\\nentrypoint = "custom-worker"\\n'
+        '[load]\\n' + load + '\\n'
         '[integrity]\\nsha256 = "sha256:' + digest + '"\\n'
     )
 elif stage == "smoke":
@@ -43,14 +70,24 @@ elif stage == "smoke":
 """,
         encoding="utf-8",
     )
-    platform = plugins.local_platform()
+    monkeypatch.setattr(plugins, "local_platform", lambda: platform)
+    monkeypatch.setenv("EXPECTED_KIND", kind)
+    monkeypatch.setenv("EXPECTED_RUST_FLAG", flag)
+    # Cargo prioritizes encoded flags. Verify that the GNU workaround is added
+    # without discarding the caller's existing options.
+    monkeypatch.setenv("EXPECTED_ENCODED", encoded or "")
+    if encoded is None:
+        monkeypatch.delenv("CARGO_ENCODED_RUSTFLAGS", raising=False)
+    else:
+        monkeypatch.setenv("CARGO_ENCODED_RUSTFLAGS", encoded)
+    monkeypatch.delenv("RUSTFLAGS", raising=False)
     manifest = {
         "name": name,
         "version": "1.2.3",
-        "type": "worker",
+        "type": kind,
         "platforms": [platform],
         "source": {"location": "in-tree", "path": "."},
-        "toolchains": {"python": "3.11"},
+        "toolchains": {"python": "3.11", **({"rust": rust} if rust else {})},
         "artifacts": {"bundle": "custom-bundle", "manifest": "runtime.toml"},
         "commands": {
             stage: {
@@ -74,6 +111,8 @@ elif stage == "smoke":
             return sys.executable + "\n"
         if argv == ["uv", "--version"]:
             return "uv fixture\n"
+        if argv == ["rustc", "--version"]:
+            return "rustc fixture\n"
         return check_output(argv, **kwargs)
 
     monkeypatch.setattr(plugins.subprocess, "check_output", tool_output)

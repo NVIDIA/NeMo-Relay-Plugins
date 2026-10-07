@@ -46,6 +46,10 @@ and smoke tests the packaged bundle. Native musl plugins require a Relay host
 linked dynamically to musl so it can load shared libraries. CI builds this test
 host from the resolved Relay commit instead of using a static musl release CLI.
 
+Native glibc libraries stay mapped in memory until Relay exits. This prevents
+Rust thread-local cleanup from calling unloaded code on glibc 2.17. Relay still
+shuts down the plugin and removes its callbacks when it closes the plugin.
+
 ## Install and enable a plugin
 
 Extract a release archive to a permanent folder, then register its runtime

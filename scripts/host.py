@@ -9,6 +9,8 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -61,9 +63,29 @@ def resolve_host(selector: dict, github: GitHub) -> dict:
 def checkout(repository: str, sha: str, destination: Path):
     destination.mkdir(parents=True, exist_ok=False)
     subprocess.run(["git", "init", str(destination)], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(
-        ["git", "-C", str(destination), "fetch", "--depth=1", repository, sha], check=True
-    )
+    fetch = ["git", "-C", str(destination), "fetch", "--depth=1", repository, sha]
+    for attempt in range(3):
+        try:
+            subprocess.run(fetch, check=True, stderr=subprocess.PIPE, text=True)
+            break
+        except subprocess.CalledProcessError as error:
+            message = error.stderr or ""
+            print(message, file=sys.stderr, end="")
+            transient = any(
+                marker in message.lower()
+                for marker in (
+                    "failed to connect",
+                    "could not connect",
+                    "could not resolve host",
+                    "connection reset",
+                    "connection timed out",
+                    "tls connection was",
+                    "requested url returned error: 50",
+                )
+            )
+            if not transient or attempt == 2:
+                raise
+            time.sleep(2**attempt)
     subprocess.run(
         ["git", "-C", str(destination), "checkout", "--detach", "FETCH_HEAD"],
         check=True,

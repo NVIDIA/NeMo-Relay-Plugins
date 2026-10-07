@@ -56,6 +56,40 @@ def test_checkout_uses_sha_even_when_branch_advances(repo, tmp_path):
     assert not (destination / "README.md").exists()
 
 
+@pytest.mark.parametrize(
+    "message,failures,expected_attempts",
+    [
+        ("Failed to connect to github.com port 443", 1, 2),
+        ("The requested URL returned error: 503", 3, 3),
+        ("fatal: remote error: upload-pack: not our ref", 1, 1),
+    ],
+)
+def test_checkout_retries_only_transient_fetch_errors(
+    tmp_path, monkeypatch, message, failures, expected_attempts
+):
+    sha = "a" * 40
+    fetches = []
+    sleeps = []
+
+    def run(argv, **kwargs):
+        if "fetch" in argv:
+            fetches.append(argv)
+            if len(fetches) <= failures:
+                raise subprocess.CalledProcessError(128, argv, stderr=message)
+
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+    monkeypatch.setattr("scripts.host.subprocess.check_output", lambda *args, **kwargs: sha)
+    monkeypatch.setattr("scripts.host.time.sleep", sleeps.append)
+    if failures >= expected_attempts:
+        with pytest.raises(subprocess.CalledProcessError):
+            checkout("https://github.com/example/repo.git", sha, tmp_path / "checkout")
+    else:
+        checkout("https://github.com/example/repo.git", sha, tmp_path / "checkout")
+    assert len(fetches) == expected_attempts
+    assert all(argv[-1] == sha for argv in fetches)
+    assert len(sleeps) == expected_attempts - 1
+
+
 def test_github_pagination(monkeypatch):
     pages = []
 
