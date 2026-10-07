@@ -22,14 +22,29 @@ This project is currently not accepting contributions.
 | [Rust native example](plugins/example-rust-native-plugin) | Demonstrates typed event, tool-call, and LLM-call hooks in a native Rust plugin. | Loads a Rust shared library into the Relay process. | `examples.rust_native_policy` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-native-plugin/LICENSE) |
 
 A **worker** is a separate process. A **native plugin** is a library loaded into
-Relay itself. Switchyard supports all five platforms listed below. The Python
-worker does not support Windows ARM64; the other examples support all five.
+Relay itself. The Rust plugins support all seven platforms listed below. The
+Python worker supports the two glibc Linux platforms, Windows x86-64, and macOS
+ARM64.
 
 - `linux-x86_64`
 - `linux-arm64`
+- `linux-musl-x86_64`
+- `linux-musl-arm64`
 - `windows-x86_64`
 - `windows-arm64`
 - `macos-arm64`
+
+Linux uses one of two C runtime libraries: **glibc** or **musl**. Choose the
+`linux-musl-*` archive for musl systems such as Alpine Linux. Choose the
+`linux-*` archive without `musl` for glibc systems. For native plugins, the
+archive must also match the C runtime used by the Relay executable.
+
+CI builds and tests Rust Linux bundles in the same pinned images as the Relay
+CLI. The glibc builds use manylinux2014, which supports glibc 2.17 and newer.
+The musl builds use musllinux 1.2. Each image runs the plugin tests and installs
+and smoke tests the packaged bundle. Native musl plugins require a Relay host
+linked dynamically to musl so it can load shared libraries. CI builds this test
+host from the resolved Relay commit instead of using a static musl release CLI.
 
 ## Install and enable a plugin
 

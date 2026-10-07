@@ -193,7 +193,11 @@ fn build_cdylib() -> (TempDir, PathBuf) {
         status.success(),
         "cargo build should produce the native library"
     );
-    let library = target.path().join("release").join(library_name());
+    let library = target
+        .path()
+        .join(std::env::var("CARGO_BUILD_TARGET").unwrap_or_default())
+        .join("release")
+        .join(library_name());
     assert!(
         library.exists(),
         "cargo build should produce the expected library"

@@ -127,3 +127,78 @@ def test_host_download_checksum_and_source_fallback(tmp_path, monkeypatch):
     assert binary.read_bytes() == b"compiled"
     build_env = calls[0][1]["env"]
     assert "RUSTUP_TOOLCHAIN" not in build_env and "CARGO_TARGET_DIR" not in build_env
+
+
+@pytest.mark.parametrize("platform", ["linux-musl-x86_64", "linux-musl-arm64"])
+def test_native_musl_host_is_dynamic_even_when_static_release_exists(
+    tmp_path, monkeypatch, platform
+):
+    from pathlib import Path
+    from scripts.catalog import PLATFORMS
+    from scripts.host import install_host
+
+    target = PLATFORMS[platform]["target"]
+    asset = f"nemo-relay-cli-{target}-0.8.4"
+    calls = []
+
+    def checkout(repository, sha, destination):
+        destination.mkdir()
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if argv[0] == "cargo":
+            assert argv[-2:] == ["--target", target]
+            assert "--release" in argv and "--locked" in argv
+            env = kwargs["env"]
+            assert "target-feature=-crt-static" in env["RUSTFLAGS"]
+            assert "CARGO_ENCODED_RUSTFLAGS" not in env
+            assert "RUSTUP_TOOLCHAIN" not in env
+            binary = Path(kwargs["cwd"]) / "target" / target / "release/nemo-relay"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"dynamic host")
+
+    monkeypatch.setattr("scripts.host.checkout", checkout)
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+    monkeypatch.setenv("CARGO_ENCODED_RUSTFLAGS", "-Ctarget-feature=+crt-static")
+    resolution = {
+        "sha": "a" * 40,
+        "tag": "0.8.4",
+        "assets": [{"name": asset}, {"name": asset + ".sha256"}],
+    }
+    assert (
+        install_host(resolution, platform, tmp_path, dynamic_musl=True).read_bytes()
+        == b"dynamic host"
+    )
+    assert calls[0][0][0] == "cargo"
+
+
+def test_public_host_download_without_github_cli_checks_digest(tmp_path, monkeypatch):
+    import hashlib
+    import io
+    from scripts.host import install_host
+
+    name = "nemo-relay-cli-x86_64-unknown-linux-musl-0.8.4"
+    payloads = {
+        name: b"static musl host",
+        name + ".sha256": hashlib.sha256(b"static musl host").hexdigest().encode(),
+    }
+    monkeypatch.setattr("scripts.host.shutil.which", lambda name: None)
+    monkeypatch.setattr("scripts.host.subprocess.run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "scripts.host.urlopen", lambda url, **kwargs: io.BytesIO(payloads[url.rsplit("/", 1)[-1]])
+    )
+    resolution = {
+        "sha": "a" * 40,
+        "tag": "0.8.4",
+        "assets": [
+            {"name": filename, "browser_download_url": f"https://github.com/example/{filename}"}
+            for filename in payloads
+        ],
+    }
+    assert (
+        install_host(resolution, "linux-musl-x86_64", tmp_path / "good").read_bytes()
+        == payloads[name]
+    )
+    payloads[name] = b"wrong binary"
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        install_host(resolution, "linux-musl-x86_64", tmp_path / "bad")
