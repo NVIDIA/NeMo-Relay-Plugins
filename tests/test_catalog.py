@@ -58,7 +58,7 @@ def test_invalid_manifests(catalog, mutate):
 
 def test_remote_selector_has_committed_sha(catalog):
     m = discover(catalog)["switchyard-plugin"]
-    assert m["source"]["ref"] == "refs/tags/v0.3.0"
+    assert m["source"]["ref"] == "release/0.3"
     assert len(m["source"]["sha"]) == 40
 
 
@@ -176,6 +176,7 @@ def test_plan_resolves_shared_override_and_default_host_separately(catalog, monk
 
 def test_plan_rejects_source_tag_sha_mismatch(catalog, monkeypatch):
     manifest = discover(catalog)["switchyard-plugin"]
+    manifest["source"]["ref"] = "refs/tags/v0.3.0"
     resolved = "a" * 40
     pinned = manifest["source"]["sha"]
     calls = []
