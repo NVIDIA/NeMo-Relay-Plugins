@@ -17,9 +17,18 @@ ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = {
     "linux-x86_64": {"runner": "ubuntu-24.04", "target": "x86_64-unknown-linux-gnu"},
     "linux-arm64": {"runner": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu"},
+    "linux-musl-x86_64": {"runner": "ubuntu-24.04", "target": "x86_64-unknown-linux-musl"},
+    "linux-musl-arm64": {"runner": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl"},
     "windows-x86_64": {"runner": "windows-2022", "target": "x86_64-pc-windows-msvc"},
     "windows-arm64": {"runner": "windows-11-arm", "target": "aarch64-pc-windows-msvc"},
     "macos-arm64": {"runner": "macos-15", "target": "aarch64-apple-darwin"},
+}
+# Use the same immutable Linux images as the Relay CLI packaging workflow.
+LINUX_IMAGES = {
+    "linux-x86_64": "quay.io/pypa/manylinux2014_x86_64@sha256:35baef377f64c2ae2e7ed647917ecd090c50f6e8b06fd605012661c2e954cc92",
+    "linux-arm64": "quay.io/pypa/manylinux2014_aarch64@sha256:63f73ecd2be3ad7cf66a402c72c1594b3f9140e263ab6838896e93a8fbf53794",
+    "linux-musl-x86_64": "quay.io/pypa/musllinux_1_2_x86_64@sha256:7b54360b191356838f6e41d4b9820c69be4f3d8dc8e7bca26f2684d48e5c8633",
+    "linux-musl-arm64": "quay.io/pypa/musllinux_1_2_aarch64@sha256:274a947b4d5d745b56b868b0d052641e0798a652e3e65755987edf60547d1268",
 }
 SHARED_PREFIXES = ("scripts/", "schemas/", ".github/workflows/", ".github/actions/")
 SHARED_FILES = {

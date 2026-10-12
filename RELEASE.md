@@ -28,7 +28,11 @@ After all builds and tests pass, including tests of the installed bundle, CI cre
 
 - One installable archive per platform: `.tar.gz` for Linux/macOS or `.zip` for Windows.
 - A `.sha256` file with a checksum for each archive. Use it to check that the downloaded file has not changed.
-- A `.json` file that records the source and repository commits, tested Relay commit, tool versions, platform, file hash, and test result.
+- A `.json` file that records the source and repository commits, tested Relay commit, tool versions, platform, file hash, and test result. Rust Linux metadata also records the pinned build image and Rust target.
+
+The draft release check requires the matching compatibility image and target
+for every Rust Linux bundle. Native musl bundles must also record a test with a
+dynamically linked musl Relay host.
 - Release notes that list PRs affecting this plugin. Remote plugins also link to their source commit and upstream documentation.
 
 CI looks back through the tagged commit’s history to find the closest published release tag for the same plugin. It lists merged PRs added since that release. For the first release, it looks through all earlier repository history.
@@ -68,6 +72,7 @@ The default test host may change if Relay publishes a new stable release between
 
 ## Repository setup
 
-Allow the actions listed in `.github/workflows/plugins.yml` and all five configured GitHub runner types. The release job needs `contents: write` and `pull-requests: read`. This repository’s action policy allows the GitHub-owned actions used here.
+Allow the actions listed in `.github/workflows/plugins.yml` and all five configured GitHub runner types. Linux Rust jobs also need Docker
+access to the pinned manylinux2014 and musllinux 1.2 images. The release job needs `contents: write` and `pull-requests: read`. This repository’s action policy allows the GitHub-owned actions used here.
 
 In branch protection settings, require **Plugin checks**. Maintainers manage these settings and publish releases. Running the local build and test commands does not create tags or releases.

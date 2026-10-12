@@ -14,7 +14,7 @@ import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from scripts.catalog import inside
+from scripts.catalog import LINUX_IMAGES, PLATFORMS, inside
 
 
 def sha256(path: Path) -> str:
@@ -140,6 +140,20 @@ def verify_assets(manifest: dict, directory: Path, commit: str) -> list[Path]:
             raise ValueError("release assets must come from a clean checkout")
         if data.get("verified") is not True:
             raise ValueError("bundle has not passed runtime verification")
+        if manifest["toolchains"].get("rust") and platform in LINUX_IMAGES:
+            if (
+                data.get("build_image") != LINUX_IMAGES[platform]
+                or data.get("rust_target") != PLATFORMS[platform]["target"]
+            ):
+                raise ValueError(
+                    "Rust Linux bundle must use the planned compatibility image and target"
+                )
+            if (
+                manifest["type"] == "native"
+                and platform.startswith("linux-musl-")
+                and data.get("dynamic_musl_host") is not True
+            ):
+                raise ValueError("native musl bundle must be tested with a dynamic musl host")
         if (
             manifest["source"]["location"] == "remote"
             and data.get("source_commit") != manifest["source"]["sha"]

@@ -32,7 +32,7 @@ class Context:
             source=Path(os.environ["SOURCE_DIR"]),
             source_root=Path(os.environ["SOURCE_ROOT"]),
             output=Path(os.environ["OUTPUT_DIR"]),
-            target=Path(os.environ["CARGO_TARGET_DIR"]),
+            target=Path(os.environ["CARGO_TARGET_DIR"]) / os.environ.get("CARGO_BUILD_TARGET", ""),
             platform=os.environ["PLUGIN_PLATFORM"],
             release=tomllib.loads((plugin / "release.toml").read_text(encoding="utf-8")),
         )

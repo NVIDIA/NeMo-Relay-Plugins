@@ -220,7 +220,7 @@ def installed_gateway(
                 proc.wait(timeout=30)
                 if proc.returncode != 0:
                     raise AssertionError(
-                        "gateway did not shut down cleanly:\n"
+                        f"gateway did not shut down cleanly (exit code {proc.returncode}):\n"
                         + log_path.read_text(encoding="utf-8")
                     )
             artifact = manifest_path.parent / manifest["source"]["artifact"]

@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from scripts.bundles import archive_name, create_archive, extract_archive, sha25
 from scripts.catalog import (
     ROOT,
     PLATFORMS,
+    LINUX_IMAGES,
     changed_paths,
     discover,
     git,
@@ -37,6 +39,8 @@ def local_platform() -> str:
     arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "x86_64", "amd64": "x86_64"}[
         machine.machine().lower()
     ]
+    if system == "linux" and "musl" in (sysconfig.get_config_var("HOST_GNU_TYPE") or ""):
+        system = "linux-musl"
     return f"{system}-{arch}"
 
 
@@ -78,6 +82,9 @@ def make_plan(
                     "name": manifest["name"],
                     "platform": platform,
                     **PLATFORMS[platform],
+                    "build_image": (
+                        LINUX_IMAGES.get(platform, "") if manifest["toolchains"].get("rust") else ""
+                    ),
                     "python": manifest["toolchains"]["python"],
                     "rust": manifest["toolchains"].get("rust", ""),
                 }
@@ -145,7 +152,8 @@ def run_plugin(
     else:
         source_root = source = inside(plugin, manifest["source"]["path"])
         source_commit = commit
-    binary = relay or install_host(resolution, platform, work / "host")
+    dynamic_musl = platform.startswith("linux-musl-") and manifest["type"] == "native"
+    binary = relay or install_host(resolution, platform, work / "host", dynamic_musl=dynamic_musl)
     env = os.environ.copy()
     env.pop("VIRTUAL_ENV", None)
     env.pop("UV_PROJECT_ENVIRONMENT", None)
@@ -181,6 +189,21 @@ def run_plugin(
     )
     if manifest["toolchains"].get("rust"):
         env["RUSTUP_TOOLCHAIN"] = manifest["toolchains"]["rust"]
+        env["CARGO_BUILD_TARGET"] = PLATFORMS[platform]["target"]
+        if dynamic_musl:
+            env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+            env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " -C target-feature=-crt-static"
+        elif manifest["type"] == "native" and platform.startswith("linux-"):
+            # glibc 2.17 lacks __cxa_thread_atexit_impl. Rust's fallback TLS
+            # destructors can otherwise jump into unmapped code after dlclose.
+            flags = ["-C", "link-arg=-Wl,-z,nodelete"]
+            if "CARGO_ENCODED_RUSTFLAGS" in env:
+                existing = env["CARGO_ENCODED_RUSTFLAGS"]
+                env["CARGO_ENCODED_RUSTFLAGS"] = (
+                    existing + "\x1f" if existing else ""
+                ) + "\x1f".join(flags)
+            else:
+                env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " " + " ".join(flags)
 
     def stage(which):
         command = manifest["commands"][which]
@@ -222,6 +245,9 @@ def run_plugin(
         },
         "local_host_override": relay is not None,
         "toolchains": manifest["toolchains"],
+        "build_image": os.environ.get("PLUGIN_BUILD_IMAGE"),
+        "rust_target": env.get("CARGO_BUILD_TARGET"),
+        "dynamic_musl_host": dynamic_musl,
         "tool_versions": {
             "python": subprocess.check_output(
                 [env["PLUGIN_PYTHON"], "--version"], text=True

@@ -223,10 +223,14 @@ fn build_worker() -> (TempDir, PathBuf) {
         status.success(),
         "cargo build should produce the worker executable"
     );
-    let worker = target.path().join("release").join(format!(
-        "nemo-relay-rust-grpc-worker-plugin-example{}",
-        std::env::consts::EXE_SUFFIX
-    ));
+    let worker = target
+        .path()
+        .join(std::env::var("CARGO_BUILD_TARGET").unwrap_or_default())
+        .join("release")
+        .join(format!(
+            "nemo-relay-rust-grpc-worker-plugin-example{}",
+            std::env::consts::EXE_SUFFIX
+        ));
     assert!(
         worker.exists(),
         "cargo build should produce the expected worker executable"

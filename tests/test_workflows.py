@@ -48,3 +48,21 @@ def test_repository_checks_publish_dependency_inventory_link():
     link = next(step for step in steps if step.get("name") == "Link dependency inventory")
     assert "steps.dependency-inventory.outputs.artifact-url" in link["if"]
     assert "$GITHUB_STEP_SUMMARY" in link["run"]
+
+
+def test_linux_container_runs_required_pipeline_before_upload():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/plugins.yml").read_text())
+    steps = workflow["jobs"]["build"]["steps"]
+    container = next(s for s in steps if "scripts/linux-plugin.sh" in s.get("run", ""))
+    assert container["if"] == "matrix.build_image != ''"
+    assert container["env"]["PLUGIN_BUILD_IMAGE"] == "${{ matrix.build_image }}"
+    assert container["env"]["PLUGIN_RUST_TARGET"] == "${{ matrix.target }}"
+    native = next(s for s in steps if "scripts.plugins run" in s.get("run", ""))
+    assert native["if"] == "matrix.build_image == ''"
+    upload = next(s for s in steps if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert steps.index(container) < steps.index(upload)
+    assert "continue-on-error" not in container
+    script = (ROOT / "scripts/linux-plugin.sh").read_text()
+    assert "uv run --locked python -m scripts.plugins run" in script
+    assert '--platform "$PLUGIN_PLATFORM" --plan .cache/linux-plugin-plan.json' in script
+    assert "UV_PROJECT_ENVIRONMENT=/tmp/relay-plugin-venv" in script

@@ -20,9 +20,9 @@ def rewrite(root, mutate):
     (root / "plugins" / NAME / "release.toml").write_text(tomli_w.dumps(manifest))
 
 
-def test_catalog_has_23_targets(catalog):
+def test_catalog_has_29_targets(catalog):
     manifests = discover(catalog)
-    assert sum(len(m["platforms"]) for m in manifests.values()) == 23
+    assert sum(len(m["platforms"]) for m in manifests.values()) == 29
     assert "windows-arm64" not in manifests[NAME]["platforms"]
 
 
@@ -58,7 +58,7 @@ def test_invalid_manifests(catalog, mutate):
 
 def test_remote_selector_has_committed_sha(catalog):
     m = discover(catalog)["switchyard-plugin"]
-    assert m["source"]["ref"] == "refs/tags/v0.3.0"
+    assert m["source"]["ref"] == "release/0.3"
     assert len(m["source"]["sha"]) == 40
 
 
@@ -146,7 +146,7 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     for manifest in manifests.values():
         manifest["relay"] = {}
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
-    assert len(plan["matrix"]["include"]) == 23
+    assert len(plan["matrix"]["include"]) == 29
     assert len(calls) == 1
     plan = make_plan(manifests, {}, "push", f"refs/tags/{NAME}-0.1.0", "a" * 40, None, catalog)
     assert len(plan["matrix"]["include"]) == 4
@@ -176,6 +176,7 @@ def test_plan_resolves_shared_override_and_default_host_separately(catalog, monk
 
 def test_plan_rejects_source_tag_sha_mismatch(catalog, monkeypatch):
     manifest = discover(catalog)["switchyard-plugin"]
+    manifest["source"]["ref"] = "refs/tags/v0.3.0"
     resolved = "a" * 40
     pinned = manifest["source"]["sha"]
     calls = []
@@ -230,6 +231,35 @@ def test_commands_are_argument_arrays():
     ) == ["python", "/has spaces/tasks.py", "$(echo unsafe)"]
     with pytest.raises(ValueError):
         expand(["${MISSING}"], {})
+
+
+def test_rust_linux_plan_uses_matching_compatibility_images(catalog, monkeypatch):
+    from scripts.catalog import LINUX_IMAGES
+
+    manifests = discover(catalog)
+    monkeypatch.setattr(
+        "scripts.plugins.resolve_tag", lambda *args: manifests["switchyard-plugin"]["source"]["sha"]
+    )
+    monkeypatch.setattr("scripts.plugins.resolve_host", lambda *args: {"sha": "a" * 40})
+    plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
+    for row in plan["matrix"]["include"]:
+        expected = LINUX_IMAGES.get(row["platform"], "") if row["rust"] else ""
+        assert row["build_image"] == expected
+        if expected:
+            assert "@sha256:" in expected
+            assert ("musllinux" in expected) == ("musl" in row["target"])
+
+
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_local_platform_distinguishes_musl(arch, monkeypatch):
+    from scripts.plugins import local_platform
+
+    monkeypatch.setattr("scripts.plugins.machine.system", lambda: "Linux")
+    monkeypatch.setattr("scripts.plugins.machine.machine", lambda: arch)
+    monkeypatch.setattr(
+        "scripts.plugins.sysconfig.get_config_var", lambda key: f"{arch}-linux-musl"
+    )
+    assert local_platform() == ("linux-musl-arm64" if arch == "aarch64" else "linux-musl-x86_64")
 
 
 def test_schema_is_valid(catalog):
