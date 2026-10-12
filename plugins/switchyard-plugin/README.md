@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Summary
 
 This plugin sends supported model requests through routes in a
-[Switchyard](https://github.com/NVIDIA-NeMo/Switchyard/tree/v0.3.0/crates/switchyard-nemo-relay-plugin)
+[Switchyard](https://github.com/NVIDIA-NeMo/Switchyard/tree/release/0.3/crates/switchyard-nemo-relay-plugin)
 deployment. It uses Switchyard's targets, client pools, routing algorithms,
 retry policies, and route validation. Relay loads the Rust shared library
 directly into its own process.
@@ -24,7 +24,7 @@ nemo-relay plugins enable nvidia.switchyard
 ```
 
 Relay cannot enable this plugin without a valid deployment. See the
-[upstream plugin documentation](https://github.com/NVIDIA-NeMo/Switchyard/tree/v0.3.0/crates/switchyard-nemo-relay-plugin#configure-relay)
+[upstream plugin documentation](https://github.com/NVIDIA-NeMo/Switchyard/tree/release/0.3/crates/switchyard-nemo-relay-plugin#configure-relay)
 for configuration fields and examples.
 
 **Distributed artifacts.** A release provides one `.tar.gz` archive for each
@@ -58,5 +58,10 @@ update the source on its own.
 The release version here is separate from the Switchyard workspace version.
 SDK package versions come from Switchyard's Cargo lockfile. A `[relay]` setting
 changes only the Relay host used for tests.
+
+Plugin release 0.3.1 requires Relay 0.10 or newer, below 1.0. Switchyard's
+runtime manifest sets this range. Its workspace uses the published Relay
+0.10.0 SDK from crates.io. This registration tracks Switchyard's `release/0.3`
+branch and builds the exact commit saved in `source.sha`.
 
 See the upstream documentation for deployment settings and supported features.

@@ -31348,7 +31348,7 @@ limitations under the License.
    limitations under the License.
 ```
 
-## nemo-relay-plugin - 0.8.4
+## nemo-relay-plugin - 0.10.0
 
 **Repository URL**: https://github.com/NVIDIA/NeMo-Relay
 **License Type(s)**: Apache-2.0
@@ -31510,7 +31510,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-## nemo-relay-types - 0.8.4
+## nemo-relay-types - 0.10.0
 
 **Repository URL**: https://github.com/NVIDIA/NeMo-Relay
 **License Type(s)**: Apache-2.0
