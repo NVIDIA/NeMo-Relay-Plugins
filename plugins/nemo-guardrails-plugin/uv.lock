@@ -815,14 +815,14 @@ wheels = [
 
 [[package]]
 name = "nemo-relay-plugin"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/e0/4d3e1c4c41b9ee96ba9a8f552a13ee06a945ba2c1af64054dc71e11af6a9/nemo_relay_plugin-0.9.0-py3-none-any.whl", hash = "sha256:3876b5834e62bca6119bdc60f8f03c497026656b0fa3f8e6dacb14ee610b07fe", size = 41395, upload-time = "2026-09-17T16:20:38.283Z" },
+    { url = "https://files.pythonhosted.org/packages/16/75/fde3bc02d36b9b2065a8c633d9d6f8c9efe8281d41eb5eabc3e9c905ad23/nemo_relay_plugin-0.10.0-py3-none-any.whl", hash = "sha256:91f66069440e7833a84012e807d8d6cc115fb1b2b58db126d165b41fde99503f", size = 43493, upload-time = "2026-10-08T22:01:40.787Z" },
 ]
 
 [[package]]
@@ -876,7 +876,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
-    { name = "nemo-relay-plugin", specifier = "==0.9.0" },
+    { name = "nemo-relay-plugin", specifier = "==0.10.0" },
     { name = "nemoguardrails", specifier = "==0.24.1" },
 ]
 

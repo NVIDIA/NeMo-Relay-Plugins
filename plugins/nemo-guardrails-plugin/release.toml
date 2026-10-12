@@ -40,7 +40,5 @@ cwd = "source"
 bundle = "bundle"
 manifest = "relay-plugin.toml"
 
-# Build from the merge that introduced execution codec capabilities. Replace
-# this SHA with the Relay 0.10.0 release commit before publishing the plugin.
 [relay]
-sha = "e20c4fedb0d16b3401dc888725940777c4ce8521"
+tag = "0.10.0"

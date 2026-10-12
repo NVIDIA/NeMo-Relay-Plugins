@@ -4449,12 +4449,12 @@ DEALINGS IN THE SOFTWARE.
 = = = = =
 ```
 
-## nemo-relay-plugin (0.9.0)
+## nemo-relay-plugin (0.10.0)
 
 ### Licenses
 License: `Apache-2.0`
 
-  - `https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/LICENSE`:
+  - `https://github.com/NVIDIA/NeMo-Relay/blob/494018ac4d6abb0085853a02f4b6d75a75ff7049/LICENSE`:
 ```
                                  Apache License
                            Version 2.0, January 2004
@@ -4664,7 +4664,7 @@ License: `Apache-2.0`
 ### Licenses
 License: `Apache-2.0`
 
-  - `https://github.com/NVIDIA/NeMo-Relay/blob/f45b602505f69da199af1bfa7f6061b3a1e7d72d/LICENSE`:
+  - `https://github.com/NVIDIA/NeMo-Relay/blob/073c913f47d4c8ed10f3af5bf781ae58f6dee20a/LICENSE`:
 ```
                                  Apache License
                            Version 2.0, January 2004
