@@ -198,8 +198,10 @@ def installed_gateway(
                             "gateway failed to start:\n" + log_path.read_text(encoding="utf-8")
                         )
                     try:
-                        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                            break
+                        # Relay binds its port before activating plugins.
+                        with urlopen(f"http://127.0.0.1:{port}/healthz", timeout=0.5) as response:
+                            if response.status == 200:
+                                break
                     except OSError:
                         time.sleep(0.2)
                 yield f"http://127.0.0.1:{port}"
