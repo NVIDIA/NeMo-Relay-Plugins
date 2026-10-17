@@ -97,6 +97,12 @@ jobs:
         with:
           tool: cargo-about@0.9.1
           fallback: none
+      - name: Install Relay source version tool
+        if: matrix.rust != '' && matrix.build_image == ''
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+        with:
+          tool: just@1.47.1
+          fallback: none
       - name: Build, test, package, and install the bundle
         if: matrix.build_image == ''
         env:

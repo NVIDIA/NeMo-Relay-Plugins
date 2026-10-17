@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -107,6 +108,7 @@ def install_host(
     version = (resolution["tag"] or "").removeprefix("v")
     asset = f"nemo-relay-cli-{PLATFORMS[platform]['target']}-{version}{suffix}"
     assets = {a["name"] for a in resolution["assets"]}
+    source_release_version = None
     if not dynamic_musl and asset in assets and asset + ".sha256" in assets:
         if shutil.which("gh"):
             subprocess.run(
@@ -152,6 +154,16 @@ def install_host(
             # Static musl executables cannot load native plugin shared libraries.
             env.pop("CARGO_ENCODED_RUSTFLAGS", None)
             env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + " -C target-feature=-crt-static"
+        if re.fullmatch(
+            r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", version
+        ):
+            source_release_version = version
+            subprocess.run(
+                ["just", "set-cargo-version", source_release_version],
+                cwd=source,
+                check=True,
+                env=env,
+            )
         # The pinned source's rust-toolchain.toml selects the host build toolchain.
         subprocess.run(
             ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli"]
@@ -165,5 +177,15 @@ def install_host(
             artifact_dir /= target
         shutil.copy2(artifact_dir / "release" / ("nemo-relay" + suffix), binary)
     binary.chmod(0o755)
-    subprocess.run([str(binary), "--version"], check=True)
+    if source_release_version is None:
+        subprocess.run([str(binary), "--version"], check=True)
+    else:
+        version_output = subprocess.check_output([str(binary), "--version"], text=True).strip()
+        print(version_output)
+        expected_version_output = f"nemo-relay {source_release_version}"
+        if version_output != expected_version_output:
+            raise ValueError(
+                f"Relay source build version mismatch: expected {expected_version_output!r}, "
+                f"got {version_output!r}"
+            )
     return binary.resolve()

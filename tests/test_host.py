@@ -114,7 +114,8 @@ def test_annotated_tag_is_peeled():
     assert resolve_tag("0.8.4", Annotated()) == "a" * 40
 
 
-def test_host_download_checksum_and_source_fallback(tmp_path, monkeypatch):
+@pytest.mark.parametrize("source_tag", [None, "custom-tag"])
+def test_host_download_checksum_and_source_fallback(tmp_path, monkeypatch, source_tag):
     from scripts.host import install_host
     from pathlib import Path
     from types import SimpleNamespace
@@ -132,6 +133,13 @@ def test_host_download_checksum_and_source_fallback(tmp_path, monkeypatch):
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("scripts.host.subprocess.run", download)
+    monkeypatch.setattr("scripts.host.shutil.which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(
+        "scripts.host.subprocess.check_output",
+        lambda *args, **kwargs: pytest.fail(
+            "downloaded or custom-tag host needs no version rewrite"
+        ),
+    )
     resolution = {
         "sha": "a" * 40,
         "tag": "0.8.4",
@@ -157,8 +165,11 @@ def test_host_download_checksum_and_source_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr("scripts.host.subprocess.run", build)
     monkeypatch.setenv("RUSTUP_TOOLCHAIN", "plugin-toolchain")
     monkeypatch.setenv("CARGO_TARGET_DIR", "/plugin/target")
-    binary = install_host({"sha": "a" * 40, "tag": None, "assets": []}, "macos-arm64", source_build)
+    binary = install_host(
+        {"sha": "a" * 40, "tag": source_tag, "assets": []}, "macos-arm64", source_build
+    )
     assert binary.read_bytes() == b"compiled"
+    assert [arguments[0] for arguments, _ in calls] == ["cargo", str(binary)]
     build_env = calls[0][1]["env"]
     assert "RUSTUP_TOOLCHAIN" not in build_env and "CARGO_TARGET_DIR" not in build_env
 
@@ -172,8 +183,9 @@ def test_native_musl_host_is_dynamic_even_when_static_release_exists(
     from scripts.host import install_host
 
     target = PLATFORMS[platform]["target"]
-    asset = f"nemo-relay-cli-{target}-0.8.4"
+    asset = f"nemo-relay-cli-{target}-0.10.2"
     calls = []
+    version_commands = []
 
     def checkout(repository, sha, destination):
         destination.mkdir()
@@ -191,19 +203,121 @@ def test_native_musl_host_is_dynamic_even_when_static_release_exists(
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"dynamic host")
 
+    def version_output(arguments, **kwargs):
+        version_commands.append(arguments)
+        return "nemo-relay 0.10.2\n"
+
     monkeypatch.setattr("scripts.host.checkout", checkout)
     monkeypatch.setattr("scripts.host.subprocess.run", run)
+    monkeypatch.setattr("scripts.host.subprocess.check_output", version_output)
     monkeypatch.setenv("CARGO_ENCODED_RUSTFLAGS", "-Ctarget-feature=+crt-static")
+    monkeypatch.setenv("RUSTFLAGS", "--cfg=plugin_configuration")
+    monkeypatch.setenv("RUSTUP_TOOLCHAIN", "plugin-toolchain")
+    monkeypatch.setenv("CARGO_TARGET_DIR", "/plugin/target")
+    monkeypatch.setenv("CARGO_BUILD_TARGET", "plugin-target")
     resolution = {
         "sha": "a" * 40,
-        "tag": "0.8.4",
+        "tag": "0.10.2",
         "assets": [{"name": asset}, {"name": asset + ".sha256"}],
     }
     assert (
         install_host(resolution, platform, tmp_path, dynamic_musl=True).read_bytes()
         == b"dynamic host"
     )
-    assert calls[0][0][0] == "cargo"
+    assert calls[0][0] == ["just", "set-cargo-version", "0.10.2"]
+    assert calls[1][0][0] == "cargo"
+    assert len(calls) == 2
+    assert version_commands == [[str(tmp_path / "nemo-relay"), "--version"]]
+    build_environment = calls[1][1]["env"]
+    assert "--cfg=plugin_configuration" in build_environment["RUSTFLAGS"]
+    assert "CARGO_TARGET_DIR" not in build_environment
+    assert "CARGO_BUILD_TARGET" not in build_environment
+
+
+@pytest.mark.parametrize("tag", ["0.10.2", "v0.10.2", "0.10.2-rc.1"])
+def test_release_source_build_prepares_and_verifies_selected_version(tmp_path, monkeypatch, tag):
+    from pathlib import Path
+    from scripts.host import install_host
+
+    version = tag.removeprefix("v")
+    commands = []
+
+    def checkout(repository, sha, destination):
+        destination.mkdir()
+
+    def run(arguments, **kwargs):
+        commands.append(arguments)
+        if arguments[0] == "cargo":
+            assert commands[0] == ["just", "set-cargo-version", version]
+            binary = Path(kwargs["cwd"]) / "target/release/nemo-relay"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"release host")
+
+    def version_output(arguments, **kwargs):
+        commands.append(arguments)
+        return f"nemo-relay {version}\n"
+
+    monkeypatch.setattr("scripts.host.checkout", checkout)
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+    monkeypatch.setattr("scripts.host.subprocess.check_output", version_output)
+
+    binary = install_host({"sha": "a" * 40, "tag": tag, "assets": []}, "macos-arm64", tmp_path)
+
+    assert binary.read_bytes() == b"release host"
+    assert commands == [
+        ["just", "set-cargo-version", version],
+        ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli"],
+        [str(binary), "--version"],
+    ]
+
+
+@pytest.mark.parametrize(
+    "version_output", ["nemo-relay 0.10.0", "nemo-relay 0.10.20", "nemo-relay 0.10.2-extra"]
+)
+def test_release_source_build_rejects_wrong_executable_version(
+    tmp_path, monkeypatch, version_output
+):
+    from pathlib import Path
+    from scripts.host import install_host
+
+    def checkout(repository, sha, destination):
+        destination.mkdir()
+
+    def run(arguments, **kwargs):
+        if arguments[0] == "cargo":
+            binary = Path(kwargs["cwd"]) / "target/release/nemo-relay"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"wrong version host")
+
+    monkeypatch.setattr("scripts.host.checkout", checkout)
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+    monkeypatch.setattr(
+        "scripts.host.subprocess.check_output", lambda *args, **kwargs: version_output
+    )
+
+    with pytest.raises(ValueError, match="Relay source build version mismatch"):
+        install_host({"sha": "a" * 40, "tag": "0.10.2", "assets": []}, "macos-arm64", tmp_path)
+
+
+def test_release_version_preparation_failure_stops_before_build(tmp_path, monkeypatch):
+    from scripts.host import install_host
+
+    commands = []
+
+    def checkout(repository, sha, destination):
+        destination.mkdir()
+
+    def run(arguments, **kwargs):
+        commands.append(arguments)
+        raise subprocess.CalledProcessError(1, arguments)
+
+    monkeypatch.setattr("scripts.host.checkout", checkout)
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        install_host({"sha": "a" * 40, "tag": "0.10.2", "assets": []}, "macos-arm64", tmp_path)
+
+    assert commands == [["just", "set-cargo-version", "0.10.2"]]
 
 
 def test_public_host_download_without_github_cli_checks_digest(tmp_path, monkeypatch):
