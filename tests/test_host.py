@@ -192,7 +192,7 @@ def test_native_musl_host_is_dynamic_even_when_static_release_exists(
 
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
-        if argv[0] == "cargo":
+        if argv[:2] == ["cargo", "build"]:
             assert argv[-2:] == ["--target", target]
             assert "--release" in argv and "--locked" in argv
             env = kwargs["env"]
@@ -224,14 +224,19 @@ def test_native_musl_host_is_dynamic_even_when_static_release_exists(
         install_host(resolution, platform, tmp_path, dynamic_musl=True).read_bytes()
         == b"dynamic host"
     )
-    assert calls[0][0] == ["just", "set-cargo-version", "0.10.2"]
-    assert calls[1][0][0] == "cargo"
-    assert len(calls) == 2
+    assert [arguments for arguments, _ in calls] == [
+        ["cargo", "fetch", "--locked", "--target", target],
+        ["just", "set-cargo-version", "0.10.2"],
+        ["cargo", "metadata", "--offline", "--format-version", "1", "--filter-platform", target],
+        ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli", "--target", target],
+    ]
     assert version_commands == [[str(tmp_path / "nemo-relay"), "--version"]]
-    build_environment = calls[1][1]["env"]
+    build_environment = calls[-1][1]["env"]
     assert "--cfg=plugin_configuration" in build_environment["RUSTFLAGS"]
     assert "CARGO_TARGET_DIR" not in build_environment
     assert "CARGO_BUILD_TARGET" not in build_environment
+    assert all(options["env"] == build_environment for _, options in calls)
+    assert calls[2][1]["stdout"] == subprocess.DEVNULL
 
 
 @pytest.mark.parametrize("tag", ["0.10.2", "v0.10.2", "0.10.2-rc.1"])
@@ -247,8 +252,7 @@ def test_release_source_build_prepares_and_verifies_selected_version(tmp_path, m
 
     def run(arguments, **kwargs):
         commands.append(arguments)
-        if arguments[0] == "cargo":
-            assert commands[0] == ["just", "set-cargo-version", version]
+        if arguments[:2] == ["cargo", "build"]:
             binary = Path(kwargs["cwd"]) / "target/release/nemo-relay"
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"release host")
@@ -265,7 +269,9 @@ def test_release_source_build_prepares_and_verifies_selected_version(tmp_path, m
 
     assert binary.read_bytes() == b"release host"
     assert commands == [
+        ["cargo", "fetch", "--locked"],
         ["just", "set-cargo-version", version],
+        ["cargo", "metadata", "--offline", "--format-version", "1"],
         ["cargo", "build", "--release", "--locked", "-p", "nemo-relay-cli"],
         [str(binary), "--version"],
     ]
@@ -284,7 +290,7 @@ def test_release_source_build_rejects_wrong_executable_version(
         destination.mkdir()
 
     def run(arguments, **kwargs):
-        if arguments[0] == "cargo":
+        if arguments[:2] == ["cargo", "build"]:
             binary = Path(kwargs["cwd"]) / "target/release/nemo-relay"
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"wrong version host")
@@ -299,17 +305,25 @@ def test_release_source_build_rejects_wrong_executable_version(
         install_host({"sha": "a" * 40, "tag": "0.10.2", "assets": []}, "macos-arm64", tmp_path)
 
 
-def test_release_version_preparation_failure_stops_before_build(tmp_path, monkeypatch):
+@pytest.mark.parametrize("failed_step", ["fetch", "stamp", "metadata"])
+def test_release_version_preparation_failure_stops_before_build(tmp_path, monkeypatch, failed_step):
     from scripts.host import install_host
 
     commands = []
+    preparation_commands = [
+        ["cargo", "fetch", "--locked"],
+        ["just", "set-cargo-version", "0.10.2"],
+        ["cargo", "metadata", "--offline", "--format-version", "1"],
+    ]
+    failed_command_index = ["fetch", "stamp", "metadata"].index(failed_step)
 
     def checkout(repository, sha, destination):
         destination.mkdir()
 
     def run(arguments, **kwargs):
         commands.append(arguments)
-        raise subprocess.CalledProcessError(1, arguments)
+        if arguments == preparation_commands[failed_command_index]:
+            raise subprocess.CalledProcessError(1, arguments)
 
     monkeypatch.setattr("scripts.host.checkout", checkout)
     monkeypatch.setattr("scripts.host.subprocess.run", run)
@@ -317,7 +331,7 @@ def test_release_version_preparation_failure_stops_before_build(tmp_path, monkey
     with pytest.raises(subprocess.CalledProcessError):
         install_host({"sha": "a" * 40, "tag": "0.10.2", "assets": []}, "macos-arm64", tmp_path)
 
-    assert commands == [["just", "set-cargo-version", "0.10.2"]]
+    assert commands == preparation_commands[: failed_command_index + 1]
 
 
 def test_public_host_download_without_github_cli_checks_digest(tmp_path, monkeypatch):
@@ -350,3 +364,78 @@ def test_public_host_download_without_github_cli_checks_digest(tmp_path, monkeyp
     payloads[name] = b"wrong binary"
     with pytest.raises(ValueError, match="checksum mismatch"):
         install_host(resolution, "linux-musl-x86_64", tmp_path / "bad")
+
+
+def test_release_source_build_refreshes_versioned_workspace_lock_with_real_cargo(
+    tmp_path, monkeypatch
+):
+    import os
+    import tomllib
+    from pathlib import Path
+    from scripts.host import install_host
+
+    from scripts.plugins import local_platform
+
+    run_process = subprocess.run
+    cargo_environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in {"RUSTUP_TOOLCHAIN", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET"}
+    }
+
+    def checkout(repository, sha, destination):
+        destination.mkdir()
+        (destination / "rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.96.1"\n')
+        (destination / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["cli"]\nresolver = "2"\n'
+            '[workspace.package]\nversion = "0.10.0"\nedition = "2021"\n'
+        )
+        source_directory = destination / "cli" / "src"
+        source_directory.mkdir(parents=True)
+        (destination / "cli" / "Cargo.toml").write_text(
+            '[package]\nname = "nemo-relay-cli"\nversion.workspace = true\nedition.workspace = true\n'
+            '[[bin]]\nname = "nemo-relay"\npath = "src/main.rs"\n'
+        )
+        (source_directory / "main.rs").write_text(
+            'fn main() { println!("nemo-relay {}", env!("CARGO_PKG_VERSION")); }\n'
+        )
+        run_process(
+            ["cargo", "generate-lockfile", "--offline"],
+            cwd=destination,
+            env=cargo_environment,
+            check=True,
+        )
+
+    def run(arguments, **kwargs):
+        if arguments[:2] == ["just", "set-cargo-version"]:
+            # Isolate the unchanged upstream version recipe; every Cargo invocation remains real.
+            manifest_path = Path(kwargs["cwd"]) / "Cargo.toml"
+            manifest_path.write_text(
+                manifest_path.read_text().replace(
+                    'version = "0.10.0"', f'version = "{arguments[2]}"'
+                )
+            )
+            result = run_process(
+                ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                stdout=subprocess.DEVNULL,
+                **kwargs,
+            )
+            locked_packages = tomllib.loads((manifest_path.parent / "Cargo.lock").read_text())[
+                "package"
+            ]
+            assert locked_packages[0]["version"] == "0.10.0"
+            return result
+        return run_process(arguments, **kwargs)
+
+    monkeypatch.setattr("scripts.host.checkout", checkout)
+    monkeypatch.setattr("scripts.host.subprocess.run", run)
+    binary = install_host(
+        {"sha": "a" * 40, "tag": "0.10.2", "assets": []}, local_platform(), tmp_path
+    )
+
+    assert (
+        subprocess.check_output([str(binary), "--version"], text=True).strip()
+        == "nemo-relay 0.10.2"
+    )
+    locked_packages = tomllib.loads((tmp_path / "source" / "Cargo.lock").read_text())["package"]
+    assert locked_packages[0]["version"] == "0.10.2"

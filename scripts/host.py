@@ -159,10 +159,24 @@ def install_host(
         ):
             source_release_version = version
             subprocess.run(
+                ["cargo", "fetch", "--locked"] + (["--target", target] if target else []),
+                cwd=source,
+                check=True,
+                env=env,
+            )
+            subprocess.run(
                 ["just", "set-cargo-version", source_release_version],
                 cwd=source,
                 check=True,
                 env=env,
+            )
+            subprocess.run(
+                ["cargo", "metadata", "--offline", "--format-version", "1"]
+                + (["--filter-platform", target] if target else []),
+                cwd=source,
+                check=True,
+                env=env,
+                stdout=subprocess.DEVNULL,
             )
         # The pinned source's rust-toolchain.toml selects the host build toolchain.
         subprocess.run(
