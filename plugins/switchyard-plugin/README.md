@@ -59,9 +59,14 @@ The release version here is separate from the Switchyard workspace version.
 SDK package versions come from Switchyard's Cargo lockfile. A `[relay]` setting
 changes only the Relay host used for tests.
 
-Plugin release 0.3.1 requires Relay 0.10 or newer, below 1.0. Switchyard's
+Plugin release 0.3.2 requires Relay 0.10.1 or newer, below 1.0. Switchyard's
 runtime manifest sets this range. Its workspace uses the published Relay
-0.10.0 SDK from crates.io. This registration tracks Switchyard's `release/0.3`
-branch and builds the exact commit saved in `source.sha`.
+0.10.1 SDK from crates.io. This registration tracks Switchyard's `release/0.3`
+branch, builds the exact commit saved in `source.sha`, and tests against Relay
+0.10.2.
+
+For routed failures, the plugin preserves known provider HTTP error statuses
+using Relay's HTTP-error API. Once Relay has sent response headers, a later
+streaming failure cannot change the client HTTP status.
 
 See the upstream documentation for deployment settings and supported features.

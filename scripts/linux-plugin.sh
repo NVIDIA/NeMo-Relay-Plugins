@@ -35,6 +35,7 @@ docker run --rm \
         --default-toolchain "$PLUGIN_RUST"
     export PATH="$HOME/.cargo/bin:$PATH"
     cargo install cargo-about --version 0.9.1 --locked --features cli
+    cargo install just --version 1.47.1 --locked
     # Keep the container environment separate from the runner environment.
     export UV_PROJECT_ENVIRONMENT=/tmp/relay-plugin-venv
     uv sync --locked --python "$(command -v python)"

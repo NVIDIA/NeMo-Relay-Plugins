@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Switchyard plugin third-party notices
 
 This plugin is built from [NVIDIA-NeMo/Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)
-at commit `d1454f304e68b082684b19c6d217231d823f81ae`, using the
+at commit `45e424d050addfbbe3bed8a61f55c440e7689eda`, using the
 `crates/switchyard-nemo-relay-plugin` Rust package and the other workspace packages it uses.
 
 Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -21,7 +21,7 @@ platform-specific packages. This file adds to the original notice. That notice
 lists Python packages, not the Rust packages used by this native plugin.
 
 The release uses Switchyard's workspace manifest and lockfile. They select the
-published NeMo Relay 0.10.0 SDK from crates.io. The generated attributions
+published NeMo Relay 0.10.1 SDK from crates.io. The generated attributions
 include this SDK and its dependencies.
 
 The published `valuable` 0.1.1 archive has no license file. The generator fetches its license
