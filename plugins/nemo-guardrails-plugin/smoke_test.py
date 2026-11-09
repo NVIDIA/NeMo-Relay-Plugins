@@ -85,7 +85,9 @@ def smoke(bundle: Path, relay: Path):
                 allowed,
             )
 
-            failure = {"error": {"code": "rail_failed", "message": "a tool-call rail failed: smoke"}}
+            failure = {
+                "error": {"code": "rail_failed", "message": "a tool-call rail failed: smoke"}
+            }
             failed = forward_tool_call(gateway, service, bundle, 500, failure)
             require(
                 failed.returncode == 2
