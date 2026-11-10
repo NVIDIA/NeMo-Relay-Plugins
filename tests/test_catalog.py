@@ -20,9 +20,9 @@ def rewrite(root, mutate):
     (root / "plugins" / NAME / "release.toml").write_text(tomli_w.dumps(manifest))
 
 
-def test_catalog_has_25_targets(catalog):
+def test_catalog_has_32_targets(catalog):
     manifests = discover(catalog)
-    assert sum(len(m["platforms"]) for m in manifests.values()) == 25
+    assert sum(len(m["platforms"]) for m in manifests.values()) == 32
     assert "windows-arm64" not in manifests[NAME]["platforms"]
 
 
@@ -75,9 +75,9 @@ def test_shared_and_local_changes(catalog):
     manifests = discover(catalog)
     assert select(manifests, ["README.md"]) == []
     assert select(manifests, ["tests/test_catalog.py"]) == []
-    assert len(select(manifests, ["scripts/new.py"])) == 4
-    assert len(select(manifests, ["uv.lock"])) == 4
-    assert len(select(manifests, None)) == 4
+    assert len(select(manifests, ["scripts/new.py"])) == 5
+    assert len(select(manifests, ["uv.lock"])) == 5
+    assert len(select(manifests, None)) == 5
     assert [m["name"] for m in select(manifests, [f"plugins/{NAME}/README.md"])] == [NAME]
     assert not affects(NAME, [f"plugins/{NAME}-other/code.py"])
 
@@ -134,10 +134,19 @@ def test_test_only_pull_request_has_no_plugin_build_plan(repo, monkeypatch):
     assert plan["hosts"] == {}
 
 
+def pinned_tags(manifests):
+    """Resolve every remote source tag to the commit its manifest pins."""
+    pins = {
+        m["source"]["repository"].removeprefix("https://github.com/"): m["source"]["sha"]
+        for m in manifests.values()
+        if m["source"]["location"] == "remote"
+    }
+    return lambda tag, github, repository: pins[repository]
+
+
 def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     calls = []
-    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
-    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(discover(catalog)))
     monkeypatch.setattr(
         "scripts.plugins.resolve_host",
         lambda selector, github: calls.append(selector) or {"sha": "a" * 40},
@@ -146,7 +155,7 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     for manifest in manifests.values():
         manifest["relay"] = {}
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
-    assert len(plan["matrix"]["include"]) == 25
+    assert len(plan["matrix"]["include"]) == 32
     assert len(calls) == 1
     plan = make_plan(manifests, {}, "push", f"refs/tags/{NAME}-0.1.0", "a" * 40, None, catalog)
     assert len(plan["matrix"]["include"]) == 4
@@ -157,8 +166,7 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
 
 def test_plan_resolves_shared_override_and_default_host_separately(catalog, monkeypatch):
     calls = []
-    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
-    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(discover(catalog)))
 
     def resolve(selector, github):
         calls.append(selector)
@@ -237,9 +245,7 @@ def test_rust_linux_plan_uses_matching_compatibility_images(catalog, monkeypatch
     from scripts.catalog import LINUX_IMAGES
 
     manifests = discover(catalog)
-    monkeypatch.setattr(
-        "scripts.plugins.resolve_tag", lambda *args: manifests["switchyard-plugin"]["source"]["sha"]
-    )
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(manifests))
     monkeypatch.setattr("scripts.plugins.resolve_host", lambda *args: {"sha": "a" * 40})
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
     for row in plan["matrix"]["include"]:
