@@ -10,7 +10,7 @@ SPDX-License-Identifier: Apache-2.0
 This plugin checks tool calls before they run. A tool call is an AI agent's
 request to use a tool, such as running a shell command. Before each tool call
 that Relay manages, the plugin sends the tool's name and arguments to a
-[NeMo Guardrails](https://github.com/NVIDIA-NeMo/Guardrails/tree/develop/crates/nemo-guardrails-relay-plugin)
+[NeMo Guardrails](https://github.com/NVIDIA-NeMo/Guardrails/tree/v0.25.0/crates/nemo-guardrails-relay-plugin)
 service. Relay loads the Rust shared library directly into its own process.
 
 The plugin has no rules of its own. The NeMo Guardrails service holds the
@@ -37,7 +37,7 @@ nemo-relay plugins enable nvidia.nemo_guardrails
 
 The configuration requires one field, `endpoint`, which is the service's base
 URL, such as `http://127.0.0.1:8100`. See the
-[upstream plugin documentation](https://github.com/NVIDIA-NeMo/Guardrails/tree/develop/crates/nemo-guardrails-relay-plugin#configuration)
+[upstream plugin documentation](https://github.com/NVIDIA-NeMo/Guardrails/tree/v0.25.0/crates/nemo-guardrails-relay-plugin#configuration)
 for the optional fields.
 
 **Distributed artifacts.** A release provides one `.tar.gz` archive for each
@@ -83,8 +83,9 @@ used for tests.
 Plugin release 0.1.0 requires Relay 0.11.0 or newer, below 1.0. It also accepts
 the 0.11.0 release candidates. The plugin's runtime manifest sets this range.
 Its workspace uses the published Relay 0.11.0 SDK from crates.io. This
-registration tracks NeMo Guardrails' `develop` branch, builds the exact commit
-saved in `source.sha`, and tests against Relay 0.11.0.
+registration builds the NeMo Guardrails `v0.25.0` release tag. It checks out
+the exact commit saved in `source.sha`, and planning checks that the tag still
+points to that commit. It tests against Relay 0.11.0.
 
 So far, each Relay minor release has changed the native plugin interface. A
 minor release is a version such as 0.11 or 0.12. Test the plugin again before

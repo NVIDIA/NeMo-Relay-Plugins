@@ -11,13 +11,15 @@ description = "NVIDIA NeMo Guardrails tool-call checks for NeMo Relay"
 license = "Apache-2.0"
 authors = ["NVIDIA Corporation"]
 repository = "https://github.com/NVIDIA-NeMo/Guardrails"
-documentation = "https://github.com/NVIDIA-NeMo/Guardrails/tree/develop/crates/nemo-guardrails-relay-plugin"
+documentation = "https://github.com/NVIDIA-NeMo/Guardrails/tree/v0.25.0/crates/nemo-guardrails-relay-plugin"
 
 [source]
 location = "remote"
 path = "crates/nemo-guardrails-relay-plugin"
 repository = "https://github.com/NVIDIA-NeMo/Guardrails"
-ref = "develop"
+ref = "refs/tags/v0.25.0"
+# Placeholder: a develop commit until NeMo Guardrails tags v0.25.0. CI planning
+# fails until then; replace this with the commit the tag resolves to.
 sha = "537fd774298260261bc4ee15e78d861b9e5814e5"
 
 [toolchains]

@@ -134,10 +134,19 @@ def test_test_only_pull_request_has_no_plugin_build_plan(repo, monkeypatch):
     assert plan["hosts"] == {}
 
 
+def pinned_tags(manifests):
+    """Resolve every remote source tag to the commit its manifest pins."""
+    pins = {
+        m["source"]["repository"].removeprefix("https://github.com/"): m["source"]["sha"]
+        for m in manifests.values()
+        if m["source"]["location"] == "remote"
+    }
+    return lambda tag, github, repository: pins[repository]
+
+
 def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
     calls = []
-    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
-    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(discover(catalog)))
     monkeypatch.setattr(
         "scripts.plugins.resolve_host",
         lambda selector, github: calls.append(selector) or {"sha": "a" * 40},
@@ -157,8 +166,7 @@ def test_plan_resolves_host_once_and_isolates_tag(catalog, monkeypatch):
 
 def test_plan_resolves_shared_override_and_default_host_separately(catalog, monkeypatch):
     calls = []
-    switchyard_sha = discover(catalog)["switchyard-plugin"]["source"]["sha"]
-    monkeypatch.setattr("scripts.plugins.resolve_tag", lambda *args: switchyard_sha)
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(discover(catalog)))
 
     def resolve(selector, github):
         calls.append(selector)
@@ -237,9 +245,7 @@ def test_rust_linux_plan_uses_matching_compatibility_images(catalog, monkeypatch
     from scripts.catalog import LINUX_IMAGES
 
     manifests = discover(catalog)
-    monkeypatch.setattr(
-        "scripts.plugins.resolve_tag", lambda *args: manifests["switchyard-plugin"]["source"]["sha"]
-    )
+    monkeypatch.setattr("scripts.plugins.resolve_tag", pinned_tags(manifests))
     monkeypatch.setattr("scripts.plugins.resolve_host", lambda *args: {"sha": "a" * 40})
     plan = make_plan(manifests, {}, "push", "refs/heads/main", "a" * 40, None, catalog)
     for row in plan["matrix"]["include"]:
