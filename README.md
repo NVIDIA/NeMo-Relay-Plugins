@@ -17,6 +17,7 @@ This project is currently not accepting contributions.
 | Plugin | What it does | How Relay loads it | Relay plugin ID | License |
 | --- | --- | --- | --- | --- |
 | [Switchyard](plugins/switchyard-plugin) | Routes supported model requests through a Switchyard deployment. | Loads a Rust shared library into the Relay process. | `nvidia.switchyard` | Apache License 2.0 |
+| [Response cache](plugins/response-cache-plugin) | Saves LLM answers and selected tool results, and replays them for repeated requests. | Loads a Rust shared library into the Relay process. | `nvidia.response_cache` | Apache License 2.0 |
 | [Python gRPC worker example](plugins/example-python-grpc-worker-plugin) | Demonstrates settings, request and event hooks, streaming, state cleanup, and middleware controls in Python. | Creates a Python environment and starts a separate `grpc-v1` worker process. | `examples.python_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-python-grpc-worker-plugin/LICENSE) |
 | [Rust gRPC worker example](plugins/example-rust-grpc-worker-plugin) | Demonstrates the same worker-plugin lifecycle in Rust, including request, stream, event, and state hooks. | Starts a separate Rust `grpc-v1` worker executable. | `examples.rust_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-grpc-worker-plugin/LICENSE) |
 | [Rust native example](plugins/example-rust-native-plugin) | Demonstrates typed event, tool-call, and LLM-call hooks in a native Rust plugin. | Loads a Rust shared library into the Relay process. | `examples.rust_native_policy` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-native-plugin/LICENSE) |
@@ -85,6 +86,7 @@ The runtime artifact depends on the plugin:
 | --- | --- |
 | Switchyard | Platform shared library and Switchyard third-party notices. |
 | Python gRPC worker | Python source package, `pyproject.toml`, and `uv.lock`. |
+| Response cache | Platform shared library. |
 | Rust gRPC worker | Platform worker executable. |
 | Rust native example | Platform shared library. |
 
