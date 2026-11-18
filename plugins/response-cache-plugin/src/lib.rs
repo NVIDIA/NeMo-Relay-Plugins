@@ -22,6 +22,8 @@ mod host;
 mod intercept;
 mod key;
 mod mark;
+/// Trace recording and timed replay, used in place of the cache when configured.
+mod record_replay;
 mod replay;
 /// Storage backends. Public for integration tests; not a stable API.
 #[doc(hidden)]
@@ -37,7 +39,8 @@ use nemo_relay_plugin::{
     NativeExecutorConfig, Plugin, PluginContext, PluginError,
 };
 use nemo_relay_types::api::runtime::{
-    LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionNextFn, LlmStreamInner,
+    LlmExecutionContext, LlmExecutionFn, LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionFn,
+    LlmStreamExecutionNextFn, LlmStreamInner, ToolExecutionContext, ToolExecutionFn,
     ToolExecutionNextFn,
 };
 use nemo_relay_types::error::FlowError;
@@ -101,7 +104,11 @@ impl Plugin for ResponseCachePlugin {
     fn validate(&self, plugin_config: &Map<String, Json>) -> Vec<ConfigDiagnostic> {
         let mut diagnostics = Vec::new();
         match parse_config(plugin_config) {
-            Ok(config) => validation::validate_response_cache(&mut diagnostics, &config),
+            Ok(config) => validation::validate_response_cache_with_raw(
+                &mut diagnostics,
+                &config,
+                Some(plugin_config),
+            ),
             Err(message) => diagnostics.push(Self::diagnostic(
                 "response_cache.invalid_config",
                 None,
@@ -126,6 +133,9 @@ impl Plugin for ResponseCachePlugin {
         Box::pin(async move {
             let config = parse_config(plugin_config).map_err(PluginError::InvalidConfig)?;
             host::install(Arc::new(host::RuntimeHost(context.runtime())));
+            if config.record_replay.is_some() {
+                return register_record_replay(context, config).map_err(PluginError::from);
+            }
             let store = match store::build_store(&config).await {
                 Ok(store) => store,
                 Err(CacheError::Storage(error)) => {
@@ -148,81 +158,97 @@ impl Plugin for ResponseCachePlugin {
     }
 }
 
+/// Installs record/replay in place of the cache, at the highest priority so it
+/// sees every model and tool call before other intercepts.
+fn register_record_replay(
+    context: &mut PluginContext<'_>,
+    config: ResponseCacheConfig,
+) -> nemo_relay_plugin::Result<()> {
+    let mut diagnostics = Vec::new();
+    validation::validate_response_cache(&mut diagnostics, &config);
+    let codes = diagnostics
+        .into_iter()
+        .map(|diagnostic| diagnostic.code)
+        .filter(|code| code.starts_with("response_cache.record_replay_"))
+        .collect();
+    let activation = record_replay::activate(config, codes);
+    let priority = record_replay::PRIORITY;
+    register_llm(
+        context,
+        "record_replay_llm_execution",
+        priority,
+        activation.llm,
+    )?;
+    register_stream(
+        context,
+        "record_replay_llm_stream_execution",
+        priority,
+        activation.stream,
+    )?;
+    register_tool(
+        context,
+        "record_replay_tool_execution",
+        priority,
+        activation.tool,
+    )
+}
+
 fn register_intercepts(
     context: &mut PluginContext<'_>,
     store: Arc<dyn store::CacheStore>,
     config: ResponseCacheConfig,
 ) -> nemo_relay_plugin::Result<()> {
     let config = Arc::new(config);
-    context.register_llm_execution_intercept("response_cache_llm_execution", config.priority, {
-        let store = Arc::clone(&store);
-        let config = Arc::clone(&config);
-        move |provider, request, _context, next| {
-            let next: LlmExecutionNextFn = Arc::new(move |request| {
-                let next = next.clone();
-                Box::pin(async move { next.call(request).await.map_err(FlowError::Internal) })
-            });
-            let run = intercept::run_cache(
-                provider,
+    let llm: LlmExecutionFn = {
+        let (store, config) = (Arc::clone(&store), Arc::clone(&config));
+        Arc::new(move |provider, request, _context, next| {
+            Box::pin(intercept::run_cache(
+                provider.to_string(),
                 request,
                 next,
                 Arc::clone(&store),
                 Arc::clone(&config),
-            );
-            async move { run.await.map_err(sdk_error) }
-        }
-    })?;
-    context.register_llm_stream_execution_intercept(
+            ))
+        })
+    };
+    register_llm(
+        context,
+        "response_cache_llm_execution",
+        config.priority,
+        llm,
+    )?;
+    let stream: LlmStreamExecutionFn = {
+        let (store, config) = (Arc::clone(&store), Arc::clone(&config));
+        Arc::new(move |provider, request, _context, next| {
+            Box::pin(intercept::run_cache_stream(
+                provider.to_string(),
+                request,
+                next,
+                Arc::clone(&store),
+                Arc::clone(&config),
+            ))
+        })
+    };
+    register_stream(
+        context,
         "response_cache_llm_stream_execution",
         config.priority,
-        {
-            let store = Arc::clone(&store);
-            let config = Arc::clone(&config);
-            move |provider, request, _context, next| {
-                let next: LlmStreamExecutionNextFn = Arc::new(move |request| {
-                    let next = next.clone();
-                    Box::pin(async move {
-                        let stream = next.open(request).await.map_err(FlowError::Internal)?;
-                        Ok(LlmJsonStream::from_closeable(UpstreamStream(stream)))
-                    })
-                });
-                let run = intercept::run_cache_stream(
-                    provider,
-                    request,
-                    next,
-                    Arc::clone(&store),
-                    Arc::clone(&config),
-                );
-                async move {
-                    let stream = run.await.map_err(sdk_error)?;
-                    let stream: LlmJsonAsyncStream =
-                        Box::pin(stream.map(|item| item.map_err(sdk_error)));
-                    Ok(stream)
-                }
-            }
-        },
+        stream,
     )?;
     if let Some(tools) = config.tools.clone().filter(|tools| tools.enabled) {
         let tools = Arc::new(tools);
-        context.register_tool_execution_intercept(
-            "response_cache_tool_execution",
-            tools.priority,
-            move |context, next| {
-                let next: ToolExecutionNextFn = Arc::new(move |args| {
-                    let next = next.clone();
-                    Box::pin(async move { next.call(args).await.map_err(FlowError::Internal) })
-                });
-                let run = tool::run_tool_cache(
-                    context.tool_name,
-                    context.args,
-                    next,
-                    Arc::clone(&store),
-                    Arc::clone(&config),
-                    Arc::clone(&tools),
-                );
-                async move { run.await.map_err(sdk_error) }
-            },
-        )?;
+        let priority = tools.priority;
+        let tool: ToolExecutionFn = Arc::new(move |context, next| {
+            Box::pin(tool::run_tool_cache(
+                context.tool_name().to_string(),
+                context.args().clone(),
+                next,
+                Arc::clone(&store),
+                Arc::clone(&config),
+                Arc::clone(&tools),
+            ))
+        });
+        register_tool(context, "response_cache_tool_execution", priority, tool)?;
     }
     Ok(())
 }
@@ -254,6 +280,71 @@ impl LlmStreamInner for UpstreamStream {
         let this = self.get_mut();
         Box::pin(async move { this.0.close().await.map_err(FlowError::Internal) })
     }
+}
+
+/// Registers an LLM execution intercept written against Relay's callback types.
+fn register_llm(
+    context: &mut PluginContext<'_>,
+    name: &str,
+    priority: i32,
+    intercept: LlmExecutionFn,
+) -> nemo_relay_plugin::Result<()> {
+    context.register_llm_execution_intercept(name, priority, move |provider, request, _, next| {
+        let next: LlmExecutionNextFn = Arc::new(move |request| {
+            let next = next.clone();
+            Box::pin(async move { next.call(request).await.map_err(FlowError::Internal) })
+        });
+        let run = intercept(&provider, request, LlmExecutionContext::default(), next);
+        async move { run.await.map_err(sdk_error) }
+    })
+}
+
+/// Registers an LLM stream execution intercept written against Relay's callback types.
+fn register_stream(
+    context: &mut PluginContext<'_>,
+    name: &str,
+    priority: i32,
+    intercept: LlmStreamExecutionFn,
+) -> nemo_relay_plugin::Result<()> {
+    context.register_llm_stream_execution_intercept(
+        name,
+        priority,
+        move |provider, request, _, next| {
+            let next: LlmStreamExecutionNextFn = Arc::new(move |request| {
+                let next = next.clone();
+                Box::pin(async move {
+                    let stream = next.open(request).await.map_err(FlowError::Internal)?;
+                    Ok(LlmJsonStream::from_closeable(UpstreamStream(stream)))
+                })
+            });
+            let run = intercept(&provider, request, LlmExecutionContext::default(), next);
+            async move {
+                let stream = run.await.map_err(sdk_error)?;
+                let stream: LlmJsonAsyncStream =
+                    Box::pin(stream.map(|item| item.map_err(sdk_error)));
+                Ok(stream)
+            }
+        },
+    )
+}
+
+/// Registers a tool execution intercept written against Relay's callback types.
+fn register_tool(
+    context: &mut PluginContext<'_>,
+    name: &str,
+    priority: i32,
+    intercept: ToolExecutionFn,
+) -> nemo_relay_plugin::Result<()> {
+    context.register_tool_execution_intercept(name, priority, move |context, next| {
+        let next: ToolExecutionNextFn = Arc::new(move |args| {
+            let next = next.clone();
+            Box::pin(async move { next.call(args).await.map_err(FlowError::Internal) })
+        });
+        let tool_context = ToolExecutionContext::new(context.tool_name, context.args)
+            .with_tool_call_id(context.tool_call_id);
+        let run = intercept(tool_context, next);
+        async move { run.await.map_err(sdk_error) }
+    })
 }
 
 /// Converts a cache error to the SDK's string error without double-wrapping.

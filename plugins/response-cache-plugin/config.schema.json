@@ -6,7 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["namespace"],
-  "x-nemo-relay-order": ["namespace", "ttl_seconds", "priority", "bypass_rate", "cache_nondeterministic", "key_strategy", "header_allowlist", "backend", "tools", "executor"],
+  "x-nemo-relay-order": ["namespace", "ttl_seconds", "priority", "bypass_rate", "cache_nondeterministic", "key_strategy", "header_allowlist", "backend", "tools", "record_replay", "executor"],
   "properties": {
     "namespace": {
       "description": "Required trust-domain name folded into every key. Do not share one namespace across mutually untrusted tenants or upstreams.",
@@ -112,6 +112,10 @@
           "additionalProperties": { "$ref": "#/$defs/tool_override" }
         }
       }
+    },
+    "record_replay": {
+      "description": "Trace recording and timed replay. When present it replaces the cache. Keys: mode (record, verify, replay), trace_directory, output_directory, latency_scale, start_gate, key_filters, divergence. Problems are reported as warnings and make every model call fail closed.",
+      "type": "object"
     },
     "executor": {
       "description": "SDK Tokio executor settings. The cache needs Tokio for its stores and streaming copy.",

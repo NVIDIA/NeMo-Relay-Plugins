@@ -71,6 +71,62 @@ Every cache decision emits a `response_cache` mark. A hit reports the tokens
 and cost it saved. Cost comes from Relay's active pricing catalog, so this
 plugin needs a Relay version that provides plugin cost estimates.
 
+## Record and replay
+
+Record/replay is a separate mode of this plugin. It saves model answers to a
+**trace** (a folder of files) once. Later runs replay those answers, chunk by
+chunk, on their original schedule. Tools always run live. When
+`record_replay` is set, it replaces the normal cache: there is no TTL, bypass,
+tool-result cache, or fallback to the live provider.
+
+```toml
+[[plugins.dynamic]]
+manifest = "./response-cache-plugin/relay-plugin.toml"
+
+[plugins.dynamic.config]
+namespace = "workload"
+
+[plugins.dynamic.config.record_replay]
+mode = "record" # record, verify, or replay
+trace_directory = "/data/trace"
+output_directory = "/data/out"
+latency_scale = 1.0
+
+[plugins.dynamic.config.record_replay.key_filters]
+drop = ["/prompt_cache_key"]
+redact_lines = ['^Session ID: .*$']
+tool_results = "placeholder"
+```
+
+| Setting | What it does |
+|---|---|
+| `mode` | `record` calls the live provider. `verify` and `replay` only serve recorded answers. |
+| `latency_scale` | Multiplies each recorded chunk time. `0` turns off waiting. |
+| `start_gate` | Optional `path` and `timeout_seconds`. The first request must match before the run reports ready. |
+| `key_filters` | Drops or redacts parts of a request before it is matched, and can replace tool results with placeholders. |
+| `divergence` | Which live tool results to compare with the trace, and how much output size may change. |
+
+The trace folder must already exist. Recording never overwrites trace files.
+After the recording process exits, the launcher removes `record.lock` before
+starting a replay. A locked, corrupt, or mismatched trace makes every model
+call fail with an `RR-*` error instead of calling the provider. Repeated
+requests use their recorded answers in order.
+
+Each chunk's time is when the plugin received it from the provider, so a replay
+follows the provider's pace. A call counts as complete when the provider's
+stream ends; a caller that drops the stream first is recorded as
+`consumer_dropped`.
+
+Record/replay needs a Unix system. Do not combine it with tool caching, cache
+bypass, header allowlists, a Redis backend, or a custom `priority`. Those
+settings, and mistakes in the `record_replay` section, produce warnings and
+leave model calls failing closed. Run plugin validation first and refuse a
+configuration with warnings.
+
+Traces do not store request headers, but prompts and answers can still contain
+sensitive data. Use test or reviewed workloads. The plugin does not measure CPU
+time; use Relay's `resource_metrics` plugin for that.
+
 ## Build and test
 
 This plugin's release name is `response-cache-plugin`.
@@ -90,9 +146,10 @@ From this folder, run the tests directly:
 cargo test --release
 ```
 
-The unit tests check cache keys, storage, replay, and marks without Relay. The
-integration tests build the library, load it into a Relay host in the test
-process, and run real LLM and tool calls through it. One test that leaves the
+The unit tests check cache keys, storage, replay, marks, and record/replay
+sessions without Relay. The integration tests build the library, load it into a
+Relay host in the test process, and run real LLM and tool calls through it,
+including a record and replay with caller timing. One test that leaves the
 plugin loaded on purpose runs in its own test program.
 
 The library names are:

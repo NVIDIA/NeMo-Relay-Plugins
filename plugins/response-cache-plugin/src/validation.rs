@@ -24,6 +24,16 @@ pub(crate) fn validate_response_cache(
     report: &mut Vec<ConfigDiagnostic>,
     config: &ResponseCacheConfig,
 ) {
+    validate_response_cache_with_raw(report, config, None);
+}
+
+/// Validates a configuration, using the raw object to tell explicit settings
+/// from defaults where record/replay forbids them.
+pub(crate) fn validate_response_cache_with_raw(
+    report: &mut Vec<ConfigDiagnostic>,
+    config: &ResponseCacheConfig,
+    raw: Option<&serde_json::Map<String, Json>>,
+) {
     if config.namespace.trim().is_empty() {
         report.push(response_cache_error(
             "response_cache.missing_namespace",
@@ -40,7 +50,7 @@ pub(crate) fn validate_response_cache(
             "ttl_seconds must be greater than 0".to_string(),
         ));
     }
-    if !(0.0..=1.0).contains(&config.bypass_rate) {
+    if config.record_replay.is_none() && !(0.0..=1.0).contains(&config.bypass_rate) {
         report.push(response_cache_error(
             "response_cache.invalid_bypass_rate",
             Some("bypass_rate"),
@@ -56,6 +66,10 @@ pub(crate) fn validate_response_cache(
                 config.key_strategy.as_str()
             ),
         ));
+    }
+    if let Some(record_replay) = &config.record_replay {
+        validate_record_replay(report, config, record_replay, raw);
+        return;
     }
     // Auth material must never enter the key or the stored entries.
     const AUTH_HEADERS: &[&str] = &[
@@ -346,5 +360,40 @@ fn response_cache_diag(
         component: Some("response_cache".to_string()),
         field: field.map(str::to_string),
         message,
+    }
+}
+
+/// Record/replay warnings. They never fail activation: an invalid setup
+/// installs fail-closed middleware that reports its reason on every call.
+fn validate_record_replay(
+    report: &mut Vec<ConfigDiagnostic>,
+    config: &ResponseCacheConfig,
+    record_replay: &Json,
+    raw: Option<&serde_json::Map<String, Json>>,
+) {
+    use crate::record_replay::config::{diagnostic, parse_record_replay};
+    if !cfg!(unix) {
+        report.push(diagnostic(
+            "platform_unsupported",
+            "record_replay",
+            "record/replay currently requires a Unix platform",
+        ));
+    }
+    report.extend(parse_record_replay(record_replay).diagnostics);
+    let explicit = |field: &str| raw.is_some_and(|raw| raw.contains_key(field));
+    for (field, forbidden) in [
+        ("tools", config.tools.is_some()),
+        ("bypass_rate", config.bypass_rate != 0.0),
+        ("header_allowlist", !config.header_allowlist.is_empty()),
+        ("backend", config.backend.kind != "in_memory"),
+        ("priority", explicit("priority")),
+    ] {
+        if forbidden {
+            report.push(diagnostic(
+                "forbidden_cache_setting",
+                field,
+                "cache setting is incompatible with record/replay",
+            ));
+        }
     }
 }
