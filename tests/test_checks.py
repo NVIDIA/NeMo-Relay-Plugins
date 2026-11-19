@@ -104,7 +104,7 @@ def test_cargo_lockfile_check_resolves_dependencies(monkeypatch, tmp_path):
 
 
 def test_hook_config_change_selects_all_plugins(catalog):
-    assert len(select(discover(catalog), [".pre-commit-config.yaml"])) == 4
+    assert len(select(discover(catalog), [".pre-commit-config.yaml"])) == 5
 
 
 def test_attribution_hook_runs_even_when_commit_only_deletes_files():

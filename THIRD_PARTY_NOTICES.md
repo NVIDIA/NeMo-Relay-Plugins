@@ -13,8 +13,9 @@ other projects keep their own copyrights, license terms, and notices.
 These attribution files follow NeMo Relay's format. Each file lists exact
 package versions and their license text. The lists come from each project's
 lockfile and include build, test, optional, and platform-specific packages.
-A listed package may not be part of every platform's binary. Switchyard's list
-covers its full Rust workspace at the saved commit.
+A listed package may not be part of every platform's binary. The Switchyard and
+NeMo Guardrails lists cover each project's full Rust workspace at its saved
+commit.
 
 | Project | Attribution file |
 | --- | --- |
@@ -31,6 +32,7 @@ files are not committed in the source tree.
 - The three examples come from [NVIDIA NeMo Relay main](https://github.com/NVIDIA/NeMo-Relay/tree/65eb82bf3d788986512246abf7f8ab7a520f28d9/examples), under Apache-2.0. Each example keeps its license. Its `UPSTREAM.md` and `NOTICE` files record the original source and local changes.
 - The license tools and their settings come from NVIDIA NeMo Relay, under Apache-2.0. See [the tools' source details](scripts/licensing/UPSTREAM.md).
 - Switchyard is built from a saved source commit, under Apache-2.0. See [Switchyard's notices](plugins/switchyard-plugin/THIRD_PARTY_NOTICES.md). Its bundle keeps the original license and notice files.
+- NeMo Guardrails is built from a saved source commit, under Apache-2.0. See [NeMo Guardrails' notices](plugins/nemo-guardrails-plugin/THIRD_PARTY_NOTICES.md). Its bundle keeps the original license files.
 
 If a package archive has no license text, the generator gets it from the source
 project. Rust archives record the commit used to publish the package. For Python,

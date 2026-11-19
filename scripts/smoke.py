@@ -43,19 +43,25 @@ def registered_manifest(document: dict, manifest_path: Path) -> dict:
 class HttpFixture:
     url: str
     calls: list
+    response: dict
+    status: int = 200
 
 
 @contextmanager
-def json_http_fixture(response: dict):
-    """Serve a caller-supplied JSON response and record POST bodies and headers."""
+def json_http_fixture(response: dict, status: int = 200):
+    """Serve a caller-supplied JSON response and record POST bodies and headers.
+
+    Each request gets the fixture's current status and response, so callers can
+    change either between requests.
+    """
     calls = []
 
     class Provider(BaseHTTPRequestHandler):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append((body, self.headers))
-            payload = json.dumps(response).encode()
-            self.send_response(200)
+            payload = json.dumps(fixture.response).encode()
+            self.send_response(fixture.status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -65,10 +71,11 @@ def json_http_fixture(response: dict):
             pass
 
     provider = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    fixture = HttpFixture(f"http://127.0.0.1:{provider.server_port}", calls, response, status)
     thread = threading.Thread(target=provider.serve_forever, daemon=True)
     thread.start()
     try:
-        yield HttpFixture(f"http://127.0.0.1:{provider.server_port}", calls)
+        yield fixture
     finally:
         provider.shutdown()
         provider.server_close()
@@ -88,6 +95,57 @@ def post_json(url: str, body: dict) -> dict:
         raise RuntimeError(error.read().decode()) from error
 
 
+def wait_until_serving(url: str, proc, log_path: Path, timeout: float = 60):
+    """Wait until a starting gateway answers HTTP requests.
+
+    Relay accepts connections as soon as it binds its port, but answers them only
+    after it activates its plugins. Hook clients give up on a gateway that takes
+    longer than half a second to answer.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        if proc.poll() is not None or time.monotonic() > deadline:
+            raise RuntimeError("gateway failed to start:\n" + log_path.read_text(encoding="utf-8"))
+        try:
+            # A refused connection fails at once; an accepted one waits for the answer.
+            with urlopen(url + "/healthz", timeout=max(deadline - time.monotonic(), 0.1)):
+                return
+        except HTTPError:
+            # Any HTTP status means the gateway is serving.
+            return
+        except OSError:
+            time.sleep(0.2)
+
+
+@dataclass
+class RelayCli:
+    """Relay's command line with one installation's settings, environment, and directory."""
+
+    command: tuple[str, ...]
+    env: dict[str, str]
+    cwd: Path
+
+    def run(
+        self, *args: str, input: str | None = None, timeout: float = 240
+    ) -> subprocess.CompletedProcess:
+        """Run a Relay command against this installation and return its result, whatever its exit code."""
+        return subprocess.run(
+            [*self.command, *args],
+            env=self.env,
+            cwd=self.cwd,
+            input=input,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+
+@dataclass
+class RelayGateway:
+    url: str
+    cli: RelayCli
+
+
 @contextmanager
 def installed_gateway(
     bundle: Path,
@@ -97,8 +155,26 @@ def installed_gateway(
     gateway_args: tuple[str, ...] = (),
     runtime_manifest: str = "relay-plugin.toml",
 ):
-    """Install and activate a bundle, yielding its gateway URL for caller-owned tests.
+    """Install and activate a bundle, yielding its gateway URL for caller-owned tests."""
+    with installed_relay_gateway(
+        bundle, relay, config, gateway_args=gateway_args, runtime_manifest=runtime_manifest
+    ) as gateway:
+        yield gateway.url
 
+
+@contextmanager
+def installed_relay_gateway(
+    bundle: Path,
+    relay: Path,
+    config: dict,
+    *,
+    gateway_args: tuple[str, ...] = (),
+    runtime_manifest: str = "relay-plugin.toml",
+):
+    """Install and activate a bundle, yielding its gateway for caller-owned tests.
+
+    The gateway's command line shares its settings and per-user credentials, so
+    tests can run other Relay commands, such as hook clients, against it.
     Successful tests must also pass graceful shutdown, tamper rejection, and
     removal. On failure, retain gateway diagnostics and clean up child processes.
     """
@@ -139,11 +215,10 @@ def installed_gateway(
             }
         )
         base = [str(relay), "--config", str(config), "--plugin-config-path", str(plugins)]
+        relay_cli = RelayCli(tuple(base), env, state)
 
         def cli(*args, success=True):
-            result = subprocess.run(
-                [*base, *args], env=env, cwd=state, capture_output=True, text=True, timeout=240
-            )
+            result = relay_cli.run(*args)
             if (result.returncode == 0) != success:
                 raise RuntimeError(f"Relay {' '.join(args)}: {result.stdout}\n{result.stderr}")
             return result.stdout
@@ -191,18 +266,9 @@ def installed_gateway(
                     # console so graceful shutdown cannot interrupt the CI runner.
                     creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0,
                 )
-                deadline = time.monotonic() + 60
-                while True:
-                    if proc.poll() is not None or time.monotonic() > deadline:
-                        raise RuntimeError(
-                            "gateway failed to start:\n" + log_path.read_text(encoding="utf-8")
-                        )
-                    try:
-                        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                            break
-                    except OSError:
-                        time.sleep(0.2)
-                yield f"http://127.0.0.1:{port}"
+                url = f"http://127.0.0.1:{port}"
+                wait_until_serving(url, proc, log_path)
+                yield RelayGateway(url, relay_cli)
                 if os.name == "nt":
                     subprocess.run(
                         [

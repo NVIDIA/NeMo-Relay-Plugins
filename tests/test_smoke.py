@@ -1,16 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import os
+import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from unittest.mock import Mock, call
 
 import pytest
 
-from scripts.smoke import json_http_fixture, post_json, registered_manifest
+from scripts.smoke import (
+    RelayCli,
+    json_http_fixture,
+    post_json,
+    registered_manifest,
+    wait_until_serving,
+)
 
 
 def test_http_fixture_accepts_unrelated_request_and_response_shapes():
@@ -18,6 +27,90 @@ def test_http_fixture_accepts_unrelated_request_and_response_shapes():
         assert post_json(fixture.url + "/custom-operation", {"event": "custom"}) == {"reply": 42}
         assert len(fixture.calls) == 1
         assert fixture.calls[0][0] == {"event": "custom"}
+
+
+def test_http_fixture_answer_can_change_between_requests():
+    with json_http_fixture({"error": {"code": "unavailable"}}, status=503) as fixture:
+        with pytest.raises(RuntimeError, match="unavailable"):
+            post_json(fixture.url, {"attempt": 1})
+        fixture.response = {"reply": "ready"}
+        fixture.status = 200
+        assert post_json(fixture.url, {"attempt": 2}) == {"reply": "ready"}
+        assert [body for body, _headers in fixture.calls] == [{"attempt": 1}, {"attempt": 2}]
+
+
+def test_relay_cli_runs_commands_with_its_installation_state(tmp_path):
+    report = (
+        "import json, os, sys; "
+        "print(json.dumps({'args': sys.argv[1:], 'xdg': os.environ['XDG_CONFIG_HOME'], "
+        "'cwd': os.getcwd(), 'stdin': sys.stdin.read()})); "
+        "sys.exit(2)"
+    )
+    xdg = tmp_path / "xdg"
+    relay = RelayCli(
+        (sys.executable, "-c", report, "--config", "config.toml"),
+        {**os.environ, "XDG_CONFIG_HOME": str(xdg)},
+        tmp_path,
+    )
+
+    result = relay.run("hook-forward", "claude", input='{"tool_name": "Bash"}')
+
+    assert result.returncode == 2
+    seen = json.loads(result.stdout)
+    assert seen["args"] == ["--config", "config.toml", "hook-forward", "claude"]
+    assert seen["xdg"] == str(xdg)
+    assert Path(seen["cwd"]).samefile(tmp_path)
+    assert seen["stdin"] == '{"tool_name": "Bash"}'
+
+
+@pytest.mark.parametrize("status", [200, 404])
+def test_gateway_wait_requires_an_http_answer(tmp_path, status):
+    accepted = threading.Event()
+    release = threading.Event()
+    served = threading.Event()
+    running = Mock()
+    running.poll.return_value = None
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        url = f"http://127.0.0.1:{server.getsockname()[1]}"
+
+        def answer():
+            connection, _ = server.accept()
+            with connection:
+                connection.recv(65536)
+                accepted.set()
+                release.wait()
+                connection.sendall(
+                    f"HTTP/1.1 {status} Fixture\r\nContent-Length: 0\r\n"
+                    "Connection: close\r\n\r\n".encode()
+                )
+
+        def wait():
+            wait_until_serving(url, running, tmp_path / "gateway.log", timeout=30)
+            served.set()
+
+        threads = [threading.Thread(target=answer), threading.Thread(target=wait)]
+        for thread in threads:
+            thread.start()
+        try:
+            assert accepted.wait(timeout=30)
+            assert not served.is_set()
+        finally:
+            release.set()
+            for thread in threads:
+                thread.join(timeout=30)
+    assert served.is_set()
+
+
+def test_gateway_wait_reports_the_log_when_the_gateway_exits(tmp_path):
+    log = tmp_path / "gateway.log"
+    log.write_text("plugin failed to load")
+    exited = Mock()
+    exited.poll.return_value = 1
+
+    with pytest.raises(RuntimeError, match="plugin failed to load"):
+        wait_until_serving("http://127.0.0.1:9", exited, log)
 
 
 def test_registered_manifest_matches_file_identity(tmp_path):

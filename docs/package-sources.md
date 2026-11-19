@@ -11,7 +11,7 @@ must include `relay-plugin.toml` and the files that its manifest names, such as
 its configuration schema. A crate can use placeholders for files produced by
 the build. Its package script must fill in those paths and hashes.
 
-The existing four plugin registrations keep their current sources. These new
+The existing five plugin registrations use in-tree or remote sources. These new
 source types are available when adding another plugin or changing its source.
 
 ## Choose a source
