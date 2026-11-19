@@ -17,6 +17,7 @@ This project is currently not accepting contributions.
 | Plugin | What it does | How Relay loads it | Relay plugin ID | License |
 | --- | --- | --- | --- | --- |
 | [Switchyard](plugins/switchyard-plugin) | Routes supported model requests through a Switchyard deployment. | Loads a Rust shared library into the Relay process. | `nvidia.switchyard` | Apache License 2.0 |
+| [NeMo Guardrails](plugins/nemo-guardrails-plugin) | Checks tool calls with a NeMo Guardrails service before they run. | Loads a Rust shared library into the Relay process. | `nvidia.nemo_guardrails` | Apache License 2.0 |
 | [Response cache](plugins/response-cache-plugin) | Saves LLM answers and selected tool results, and replays them for repeated requests. | Loads a Rust shared library into the Relay process. | `nvidia.response_cache` | Apache License 2.0 |
 | [Python gRPC worker example](plugins/example-python-grpc-worker-plugin) | Demonstrates settings, request and event hooks, streaming, state cleanup, and middleware controls in Python. | Creates a Python environment and starts a separate `grpc-v1` worker process. | `examples.python_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-python-grpc-worker-plugin/LICENSE) |
 | [Rust gRPC worker example](plugins/example-rust-grpc-worker-plugin) | Demonstrates the same worker-plugin lifecycle in Rust, including request, stream, event, and state hooks. | Starts a separate Rust `grpc-v1` worker executable. | `examples.rust_grpc_worker` | [Apache License 2.0](https://github.com/NVIDIA/NeMo-Relay-Plugins/blob/main/plugins/example-rust-grpc-worker-plugin/LICENSE) |
@@ -65,8 +66,9 @@ nemo-relay plugins enable <plugin-id>
 Every supplied manifest sets `enabled = false`, so registering a plugin does
 not activate it. Configure the plugin and Relay's trust policy before enabling
 it. Native plugins run inside Relay and should only be loaded from a trusted
-bundle. Switchyard also requires a deployment configuration. See the plugin's
-README and the [release guide](RELEASE.md) for the exact setup.
+bundle. Switchyard also requires a deployment configuration, and NeMo
+Guardrails requires the address of its service. See the plugin's README and
+the [release guide](RELEASE.md) for the exact setup.
 
 ## Distributed artifacts
 
@@ -85,6 +87,7 @@ The runtime artifact depends on the plugin:
 | Plugin | Runtime and additional bundle contents |
 | --- | --- |
 | Switchyard | Platform shared library and Switchyard third-party notices. |
+| NeMo Guardrails | Platform shared library and NeMo Guardrails third-party notices. |
 | Python gRPC worker | Python source package, `pyproject.toml`, and `uv.lock`. |
 | Response cache | Platform shared library. |
 | Rust gRPC worker | Platform worker executable. |
