@@ -18,9 +18,7 @@ location = "remote"
 path = "crates/nemo-guardrails-relay-plugin"
 repository = "https://github.com/NVIDIA-NeMo/Guardrails"
 ref = "refs/tags/v0.25.0"
-# Placeholder: a develop commit until NeMo Guardrails tags v0.25.0. CI planning
-# fails until then; replace this with the commit the tag resolves to.
-sha = "537fd774298260261bc4ee15e78d861b9e5814e5"
+sha = "036b11dee8659431e85c0a5b9b2a0ec22dca2301"
 
 [toolchains]
 python = "3.11"

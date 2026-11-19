@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # NeMo Guardrails plugin third-party notices
 
 This plugin is built from [NVIDIA-NeMo/Guardrails](https://github.com/NVIDIA-NeMo/Guardrails)
-at commit `537fd774298260261bc4ee15e78d861b9e5814e5`, using the
+at tag `v0.25.0` (commit `036b11dee8659431e85c0a5b9b2a0ec22dca2301`), using the
 `crates/nemo-guardrails-relay-plugin` Rust package.
 
 Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
