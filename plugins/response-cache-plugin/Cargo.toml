@@ -18,9 +18,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # NeMo Relay 1.0 SDK and pure codec crates, pinned to the Relay commit that adds
 # the plugin pricing operations and removes the built-in response cache.
-nemo-relay-codecs = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
-nemo-relay-plugin = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
-nemo-relay-types = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
+nemo-relay-codecs = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
+nemo-relay-plugin = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
+nemo-relay-types = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
 
 futures = "0.3"
 redis = { version = "1.1", features = ["tokio-comp", "connection-manager"] }
@@ -33,10 +33,10 @@ tokio = { version = "1.53.3", features = ["rt", "macros", "sync", "time"] }
 tokio-stream = { version = "0.1", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
-nemo-relay-adaptive = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
-nemo-relay-model-pricing = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
-nemo-relay-plugin-host = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872", features = ["__skip-implicit-config"] }
-nemo-relay-runtime = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "777d38c5789bdaaf19363186d2261821e88de872" }
+nemo-relay-adaptive = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
+nemo-relay-model-pricing = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
+nemo-relay-plugin-host = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71", features = ["__skip-implicit-config"] }
+nemo-relay-runtime = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71" }
 tempfile = "3"
 tokio = { version = "1.53.3", features = ["rt", "macros", "sync", "time", "test-util", "rt-multi-thread"] }
 toml = "0.9"

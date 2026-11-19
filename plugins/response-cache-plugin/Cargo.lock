@@ -1501,7 +1501,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-adaptive"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "chrono",
  "log",
@@ -1525,7 +1525,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-codecs"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "log",
  "nemo-relay-types",
@@ -1537,7 +1537,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-diagnostics"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "arrayvec",
  "chrono",
@@ -1555,7 +1555,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-model-pricing"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "log",
  "nemo-relay-plugin",
@@ -1569,7 +1569,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-observability"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1608,7 +1608,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-plugin"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "futures",
  "nemo-relay-plugin-abi",
@@ -1623,7 +1623,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-plugin-abi"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "async-ffi",
  "quote",
@@ -1634,7 +1634,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-plugin-host"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1683,7 +1683,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-resource-metrics"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "chrono",
  "libloading",
@@ -1726,7 +1726,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-runtime"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "bitflags",
  "chrono",
@@ -1749,7 +1749,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-types"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "bitflags",
  "chrono",
@@ -1768,7 +1768,7 @@ dependencies = [
 [[package]]
 name = "nemo-relay-worker-proto"
 version = "1.0.0"
-source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=777d38c5789bdaaf19363186d2261821e88de872#777d38c5789bdaaf19363186d2261821e88de872"
+source = "git+https://github.com/NVIDIA/NeMo-Relay.git?rev=9a36e9ed488ac27c87c6af9272cba7d2d5546f71#9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
 dependencies = [
  "chrono",
  "nemo-relay-types",

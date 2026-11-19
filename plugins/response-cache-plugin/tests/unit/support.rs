@@ -39,7 +39,7 @@ impl Host for TestHost {
             .push((name.to_owned(), data.clone(), metadata.clone()));
     }
 
-    fn estimate_cost(
+    fn estimate_cost_for_provider(
         &self,
         provider: Option<&str>,
         model: &str,
@@ -48,7 +48,7 @@ impl Host for TestHost {
         nemo_relay_model_pricing::estimate_cost_for_provider(provider, model, usage)
     }
 
-    fn estimate_response_cost(
+    fn response_cost_for_provider(
         &self,
         response: &AnnotatedLlmResponse,
         provider: Option<&str>,

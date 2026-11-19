@@ -17,14 +17,14 @@ pub(crate) trait Host: Send + Sync {
     /// Emits a mark event in the caller's current scope.
     fn emit_mark(&self, name: &str, data: &Json, metadata: &Json);
     /// Prices token usage with the host's active pricing catalog.
-    fn estimate_cost(
+    fn estimate_cost_for_provider(
         &self,
         provider: Option<&str>,
         model: &str,
         usage: &Usage,
     ) -> Option<CostEstimate>;
     /// Prices a normalized response with the host's full pricing rules.
-    fn estimate_response_cost(
+    fn response_cost_for_provider(
         &self,
         response: &AnnotatedLlmResponse,
         provider: Option<&str>,
@@ -62,23 +62,26 @@ impl Host for RuntimeHost {
         let _ = self.0.emit_mark(name, Some(data), Some(metadata));
     }
 
-    fn estimate_cost(
+    fn estimate_cost_for_provider(
         &self,
         provider: Option<&str>,
         model: &str,
         usage: &Usage,
     ) -> Option<CostEstimate> {
         // A host without the pricing operation reports an unknown cost.
-        self.0.estimate_cost(provider, model, usage).ok().flatten()
+        self.0
+            .estimate_cost_for_provider(provider, model, usage)
+            .ok()
+            .flatten()
     }
 
-    fn estimate_response_cost(
+    fn response_cost_for_provider(
         &self,
         response: &AnnotatedLlmResponse,
         provider: Option<&str>,
     ) -> Option<CostEstimate> {
         self.0
-            .estimate_response_cost(response, provider)
+            .response_cost_for_provider(response, provider)
             .ok()
             .flatten()
     }

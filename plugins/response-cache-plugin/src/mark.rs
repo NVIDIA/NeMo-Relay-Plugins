@@ -323,7 +323,7 @@ pub(crate) fn emit_cache_mark(mark: CacheMark<'_>) {
 
 /// Prices usage with the host's active catalog; `None` when unknown.
 fn estimate_cost(provider: Option<&str>, model: &str, usage: &Usage) -> Option<CostEstimate> {
-    crate::host::current()?.estimate_cost(provider, model, usage)
+    crate::host::current()?.estimate_cost_for_provider(provider, model, usage)
 }
 
 /// Adds the host's cost estimate when the response does not report one.
@@ -339,7 +339,7 @@ fn attach_estimated_cost(response: &mut AnnotatedLlmResponse, provider: Option<&
     let Some(host) = crate::host::current() else {
         return;
     };
-    let cost = host.estimate_response_cost(response, provider);
+    let cost = host.response_cost_for_provider(response, provider);
     if let Some(usage) = response.usage.as_mut() {
         usage.cost = cost;
     }
