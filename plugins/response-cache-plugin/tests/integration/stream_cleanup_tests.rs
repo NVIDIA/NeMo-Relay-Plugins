@@ -5,7 +5,7 @@
 //!
 //! When an upstream close fails, Relay keeps the plugin loaded because it
 //! cannot prove a safe unload. That leaves this process's test host unusable
-//! for other tests, so this test runs in its own binary.
+//! for other tests, so these checks run in their own binary.
 
 #[path = "../support/plugin_host.rs"]
 mod plugin_host_test_support;
@@ -115,15 +115,50 @@ fn openai_chat_stream_chunks() -> Vec<Json> {
     ]
 }
 
-/// The caller sees an upstream close failure on every close attempt.
+/// A failed upstream close keeps the answer out of the cache and reaches the caller.
 ///
-/// Unlike the former in-process cache, the plugin cannot see this failure
-/// before it stores the response: the native SDK closes the upstream stream
-/// itself at end of stream and keeps the close result for component shutdown.
+/// Both cases share one activation: after a failed close Relay keeps the plugin
+/// loaded, so this binary cannot start a second one.
 #[tokio::test]
-async fn stream_cleanup_error_reaches_the_caller_on_every_close() {
+async fn failed_upstream_closes_never_populate_the_cache() {
     activate_cache(scoped_cache_config()).await;
 
+    // A fully drained stream whose upstream close fails is not stored.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let close_calls = Arc::new(AtomicUsize::new(0));
+    let provider = close_tracking_stream_provider(
+        Arc::clone(&calls),
+        Arc::clone(&close_calls),
+        openai_chat_stream_chunks(),
+        Some(FlowError::NotFound("drained cleanup failed".into())),
+    );
+    let mut drained = start_stream(&provider, chat_request("drained cleanup failure")).await;
+    let mut chunks = 0;
+    let mut failure = None;
+    while let Some(item) = drained.next().await {
+        match item {
+            Ok(_) => chunks += 1,
+            Err(error) => failure = Some(error),
+        }
+    }
+    assert_eq!(chunks, openai_chat_stream_chunks().len());
+    let failure = failure.expect("the caller must see the upstream close failure");
+    assert!(
+        matches!(&failure, FlowError::NotFound(message) if message == "drained cleanup failed"),
+        "{failure:?}"
+    );
+    let _ = drained.close().await;
+    // Native plugin streams call the provider on their first read.
+    let mut repeat = start_stream(&provider, chat_request("drained cleanup failure")).await;
+    while repeat.next().await.is_some() {}
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "the repeat must reach the provider because nothing was stored"
+    );
+    let _ = repeat.close().await;
+
+    // Closing early reports the failure, typed, on every close attempt.
     let calls = Arc::new(AtomicUsize::new(0));
     let close_calls = Arc::new(AtomicUsize::new(0));
     let provider = close_tracking_stream_provider(
@@ -132,18 +167,26 @@ async fn stream_cleanup_error_reaches_the_caller_on_every_close() {
         openai_chat_stream_chunks(),
         Some(FlowError::NotFound("cache tee cleanup failed".into())),
     );
-
     let mut first = start_stream(&provider, chat_request("cleanup failure")).await;
     assert!(first.next().await.unwrap().is_ok());
     for _ in 0..2 {
         let error = first.close().await.expect_err("close should fail");
-        // Error kinds do not cross the native plugin boundary; the message does.
         assert!(
             error.to_string().contains("cache tee cleanup failed"),
             "{error}"
         );
+        assert!(matches!(error, FlowError::NotFound(_)), "{error:?}");
     }
     assert!(first.next().await.is_none());
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(close_calls.load(Ordering::SeqCst), 1);
+
+    let mut second = start_stream(&provider, chat_request("cleanup failure")).await;
+    assert!(second.next().await.unwrap().is_ok());
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "an upstream cleanup failure must prevent the cache write"
+    );
+    assert!(second.close().await.is_err());
+    assert_eq!(close_calls.load(Ordering::SeqCst), 2);
 }

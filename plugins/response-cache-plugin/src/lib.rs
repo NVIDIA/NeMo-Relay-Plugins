@@ -33,11 +33,12 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use nemo_relay_plugin::{
-    ConfigDiagnostic, DiagnosticLevel, Json, LlmJsonAsyncStream, NativeExecutorConfig, Plugin,
-    PluginContext, PluginError,
+    ConfigDiagnostic, DiagnosticLevel, Json, LlmInputStream, LlmJsonAsyncStream,
+    NativeExecutorConfig, Plugin, PluginContext, PluginError,
 };
 use nemo_relay_types::api::runtime::{
-    LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionNextFn, ToolExecutionNextFn,
+    LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionNextFn, LlmStreamInner,
+    ToolExecutionNextFn,
 };
 use nemo_relay_types::error::FlowError;
 use serde_json::Map;
@@ -181,10 +182,8 @@ fn register_intercepts(
                 let next: LlmStreamExecutionNextFn = Arc::new(move |request| {
                     let next = next.clone();
                     Box::pin(async move {
-                        let stream = next.call(request).await.map_err(FlowError::Internal)?;
-                        Ok(LlmJsonStream::new(
-                            stream.map(|item| item.map_err(FlowError::Internal)),
-                        ))
+                        let stream = next.open(request).await.map_err(FlowError::Internal)?;
+                        Ok(LlmJsonStream::from_closeable(UpstreamStream(stream)))
                     })
                 });
                 let run = intercept::run_cache_stream(
@@ -226,6 +225,35 @@ fn register_intercepts(
         )?;
     }
     Ok(())
+}
+
+/// A downstream stream whose close reports the upstream cleanup result.
+///
+/// The cache stores a streamed answer only after the upstream closes cleanly.
+struct UpstreamStream(LlmInputStream);
+
+impl futures::Stream for UpstreamStream {
+    type Item = nemo_relay_types::error::Result<Json>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::pin::Pin::new(&mut self.0)
+            .poll_next(cx)
+            .map(|item| item.map(|item| item.map_err(FlowError::Internal)))
+    }
+}
+
+impl LlmStreamInner for UpstreamStream {
+    fn close(
+        self: std::pin::Pin<&mut Self>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = nemo_relay_types::error::Result<()>> + Send + '_>,
+    > {
+        let this = self.get_mut();
+        Box::pin(async move { this.0.close().await.map_err(FlowError::Internal) })
+    }
 }
 
 /// Converts a cache error to the SDK's string error without double-wrapping.

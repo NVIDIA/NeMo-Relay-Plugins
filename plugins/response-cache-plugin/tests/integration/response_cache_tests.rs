@@ -2970,9 +2970,8 @@ async fn tool_callback_errors_emit_misses_and_are_never_cached() {
         )
         .await
         .expect_err("a tool callback error must reach the caller");
-        // The native plugin boundary carries the continuation error as text.
         assert!(
-            matches!(&error, FlowError::Internal(message) if message.ends_with("tool unavailable")),
+            matches!(&error, FlowError::Internal(message) if message == "tool unavailable"),
             "{error:?}"
         );
     }
@@ -3557,4 +3556,105 @@ async fn unreachable_store_leaves_calls_live() {
     call(&provider, chat_request("no store")).await;
     call(&provider, chat_request("no store")).await;
     assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+fn upstream_failures() -> Vec<FlowError> {
+    use nemo_relay_types::error::{UpstreamFailure, UpstreamFailureClass};
+    vec![
+        FlowError::Upstream(UpstreamFailure {
+            status: Some(429),
+            body: "slow down".into(),
+            headers: [("retry-after".to_string(), "2".to_string())].into(),
+            class: UpstreamFailureClass::RetryableStatus,
+        }),
+        FlowError::Upstream(UpstreamFailure {
+            status: None,
+            body: "connection refused".into(),
+            headers: Default::default(),
+            class: UpstreamFailureClass::Connection,
+        }),
+    ]
+}
+
+fn assert_same_upstream_failure(actual: &FlowError, expected: &FlowError) {
+    let (FlowError::Upstream(actual), FlowError::Upstream(expected)) = (actual, expected) else {
+        panic!("expected {expected:?}, got {actual:?}");
+    };
+    assert_eq!(actual.status, expected.status);
+    // Relay adds its documented reporting context to plugin-reported failures.
+    assert_eq!(
+        actual.body,
+        format!(
+            "Reported by plugin 'nvidia.response_cache': {}",
+            expected.body
+        )
+    );
+    assert_eq!(actual.headers, expected.headers);
+    assert_eq!(actual.class, expected.class);
+}
+
+/// Retry-aware dispatch needs the provider's typed failure, so the cache must
+/// pass it through unchanged on misses and sampled bypasses.
+#[tokio::test]
+async fn provider_failures_keep_their_type_through_misses_and_bypasses() {
+    let _guard = TEST_MUTEX.lock().await;
+    for bypass_rate in [0.0, 1.0] {
+        reset_global();
+        activate_cache(ResponseCacheConfig {
+            bypass_rate,
+            ..scoped_cache_config()
+        })
+        .await;
+        for (index, failure) in upstream_failures().into_iter().enumerate() {
+            let provider: LlmExecutionNextFn = Arc::new({
+                let failure = failure.clone();
+                move |_request: LlmRequest| {
+                    let failure = failure.clone();
+                    Box::pin(async move { Err(failure) })
+                }
+            });
+            let error = llm_call_execute(
+                LlmCallExecuteParams::builder()
+                    .name("openai")
+                    .request(chat_request(&format!("failure {bypass_rate} {index}")))
+                    .func(provider)
+                    .model_name("gpt-4o")
+                    .build(),
+            )
+            .await
+            .expect_err("the provider failure must reach the caller");
+            assert_same_upstream_failure(&error, &failure);
+
+            let stream_provider: LlmStreamExecutionNextFn = Arc::new({
+                let failure = failure.clone();
+                move |_request: LlmRequest| {
+                    let failure = failure.clone();
+                    Box::pin(async move { Err(failure) })
+                }
+            });
+            let error = llm_stream_call_execute(
+                LlmStreamCallExecuteParams::builder()
+                    .name("openai")
+                    .request(chat_request(&format!(
+                        "stream failure {bypass_rate} {index}"
+                    )))
+                    .func(stream_provider)
+                    .collector(Box::new(|_chunk| Ok(())))
+                    .finalizer(Box::new(|| json!({"done": true})))
+                    .model_name("gpt-4o")
+                    .build(),
+            )
+            .await;
+            // A native plugin stream opens lazily, so the failure is its first item.
+            let error = match error {
+                Err(error) => error,
+                Ok(mut stream) => stream
+                    .next()
+                    .await
+                    .expect("the stream must report the provider failure")
+                    .expect_err("the provider failure must reach the stream caller"),
+            };
+            assert_same_upstream_failure(&error, &failure);
+        }
+    }
 }

@@ -120,7 +120,12 @@ fn plugin_library() -> &'static Path {
             status.success(),
             "cargo build should produce the plugin library"
         );
-        let library = target.join("release").join(library_name());
+        // An explicit build target, as the release runner sets, adds a triple directory.
+        let profile_dir = match std::env::var("CARGO_BUILD_TARGET") {
+            Ok(triple) if !triple.is_empty() => target.join(triple).join("release"),
+            _ => target.join("release"),
+        };
+        let library = profile_dir.join(library_name());
         assert!(
             library.exists(),
             "missing built library {}",

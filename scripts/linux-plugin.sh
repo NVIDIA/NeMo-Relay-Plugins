@@ -7,8 +7,17 @@ set -euo pipefail
 repo_dir="$(pwd)"
 mkdir -p .cache
 cp "$1" .cache/linux-plugin-plan.json
+# Relay 1.0 test hosts built from source need the runner's protoc, its bundled
+# well-known types, and Buf. Buf is a static binary; musl images run protoc
+# through gcompat.
+protoc_bin="$(command -v protoc)"
+protoc_include="$(cd "$(dirname "$protoc_bin")/../include" && pwd)"
+buf_bin="$(command -v buf)"
 docker run --rm \
   --volume "$repo_dir:$repo_dir" \
+  --volume "$protoc_bin:/usr/local/bin/protoc:ro" \
+  --volume "$protoc_include/google:/usr/local/include/google:ro" \
+  --volume "$buf_bin:/usr/local/bin/buf:ro" \
   --workdir "$repo_dir" \
   --env GH_TOKEN \
   --env PLUGIN_NAME \

@@ -44,4 +44,4 @@ manifest = "relay-plugin.toml"
 # The plugin needs the Relay 1.0 pricing operations, which are not in a
 # published release yet. The SDK lock and this test host use the same commit.
 [relay]
-sha = "9a36e9ed488ac27c87c6af9272cba7d2d5546f71"
+sha = "e3612d2bda66c5e7a8d5fdfbfa2dd6f3ece89573"
