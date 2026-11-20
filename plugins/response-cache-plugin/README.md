@@ -14,8 +14,7 @@ results from tools that you mark as safe to reuse.
 
 The plugin used to be the `response_cache` section of Relay's adaptive plugin.
 It is now a separate native plugin. A **native plugin** is a library that Relay
-loads into its own process. See [UPSTREAM.md](UPSTREAM.md) for what changed in
-the move.
+loads into its own process.
 
 **Load and enable.** The bundled `relay-plugin.toml` registers
 `nvidia.response_cache`. The manifest starts disabled. Configure the plugin and
@@ -47,7 +46,8 @@ the store, the call runs live.
 ## Configure
 
 Every setting is in [config.schema.json](config.schema.json). The keys are the
-same as the old adaptive `response_cache` section. `namespace` is required. It
+same as the old adaptive `response_cache` section, but unknown keys now fail
+validation instead of producing warnings. `namespace` is required. It
 names one group of users that may share answers. Never share a namespace
 between tenants or upstreams that should not see each other's data.
 

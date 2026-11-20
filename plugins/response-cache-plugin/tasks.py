@@ -28,7 +28,7 @@ def package(ctx: Context):
     manifest = tomllib.loads((ctx.source / "relay-plugin.toml").read_text(encoding="utf-8"))
     manifest["source"]["artifact"] = filename
     manifest["load"]["library"] = filename
-    for filename in ["config.schema.json", "LICENSE", "NOTICE", "UPSTREAM.md"]:
+    for filename in ["config.schema.json", "LICENSE", "NOTICE"]:
         shutil.copy2(ctx.source / filename, ctx.bundle / filename)
     write_runtime_manifest(ctx.bundle, manifest)
     write_attributions(ctx)

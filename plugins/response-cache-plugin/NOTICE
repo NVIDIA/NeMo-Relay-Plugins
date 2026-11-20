@@ -5,5 +5,4 @@ This software includes source moved from NVIDIA NeMo Relay:
 https://github.com/NVIDIA/NeMo-Relay
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
-See UPSTREAM.md for the origin and local changes.
 Third-party dependency licenses and notices are reproduced in ATTRIBUTIONS-Rust.md.
