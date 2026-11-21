@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+schema_version = 1
+name = "response-cache-plugin"
+version = "1.0.0"
+type = "native"
+
+[metadata]
+description = "Exact-match LLM response and tool-result cache for NeMo Relay"
+license = "Apache-2.0"
+authors = ["NVIDIA Corporation"]
+repository = "https://github.com/NVIDIA/NeMo-Relay-Plugins"
+documentation = "https://github.com/NVIDIA/NeMo-Relay-Plugins/tree/main/plugins/response-cache-plugin"
+
+[source]
+location = "in-tree"
+path = "."
+
+[toolchains]
+python = "3.11"
+rust = "1.96.1"
+
+[commands.build]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "build"]
+cwd = "source"
+
+[commands.test]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "test"]
+cwd = "source"
+
+[commands.package]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/tasks.py", "package"]
+cwd = "source"
+
+[commands.smoke]
+argv = ["${PYTHON}", "${PLUGIN_DIR}/smoke_test.py"]
+cwd = "source"
+
+[artifacts]
+bundle = "bundle"
+manifest = "relay-plugin.toml"
+
+# The plugin needs the Relay 1.0 pricing operations, which are not in a
+# published release yet. The SDK lock and this test host use the same commit.
+[relay]
+sha = "0dfd8e0a176d08d034f824d6fd97a2596465b4f1"

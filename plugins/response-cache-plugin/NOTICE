@@ -1,0 +1,8 @@
+NVIDIA NeMo Relay response cache plugin
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This software includes source moved from NVIDIA NeMo Relay:
+https://github.com/NVIDIA/NeMo-Relay
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+Third-party dependency licenses and notices are reproduced in ATTRIBUTIONS-Rust.md.

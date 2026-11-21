@@ -91,6 +91,18 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           cache: false
+      # Relay 1.0 test hosts built from source need protoc and Buf. Linux
+      # compatibility images receive the same binaries from the runner.
+      - name: Install protoc for the Relay test host
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3
+        with:
+          version: "31.1"
+          repo-token: ${{ github.token }}
+      - name: Install Buf for the Relay test host
+        uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1.50.0
+        with:
+          version: "1.75.0"
+          github_token: ${{ github.token }}
       - name: Install Rust license tool
         if: matrix.rust != '' && matrix.build_image == ''
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Integration tests load the plugin into an in-process Relay host. Keep that host
+# from reading the machine's user or system plugins.toml, which may enable
+# unrelated plugins. Only the test-only `__skip-implicit-config` feature reads it.
+[env]
+NEMO_RELAY_TEST_SKIP_IMPLICIT_CONFIG = "1"

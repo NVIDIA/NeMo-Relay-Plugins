@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+manifest_version = 1
+
+[plugin]
+id = "nvidia.response_cache"
+kind = "rust_dynamic"
+
+[compat]
+relay = ">=1.0.0,<2.0"
+native_api = "v1.0"
+
+[defaults]
+enabled = false
+
+[capabilities]
+items = ["plugin_native", "config_schema"]
+
+[config_schema]
+path = "config.schema.json"
+
+[source]
+# Keep this path aligned with `load.library` when materializing the manifest.
+artifact = "target/release/<platform-library-file>"
+
+[integrity]
+# Replace this placeholder with the SHA-256 digest of `source.artifact`.
+sha256 = "sha256:<artifact-sha256>"
+
+[load]
+# Replace `<platform-library-file>` with the file built by `cargo build --release`
+# for your platform. See README.md for the library names.
+library = "target/release/<platform-library-file>"

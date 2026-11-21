@@ -1,0 +1,152 @@
+{
+  "$comment": "SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Response Cache Plugin",
+  "description": "Configures the exact-match LLM response cache and the opt-in tool-result cache.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["namespace"],
+  "x-nemo-relay-order": ["namespace", "ttl_seconds", "priority", "bypass_rate", "cache_nondeterministic", "key_strategy", "header_allowlist", "backend", "tools", "executor"],
+  "properties": {
+    "namespace": {
+      "description": "Required trust-domain name folded into every key. Do not share one namespace across mutually untrusted tenants or upstreams.",
+      "type": "string"
+    },
+    "ttl_seconds": {
+      "description": "How long a stored answer stays reusable, in seconds. Must be greater than zero.",
+      "type": "integer",
+      "minimum": 0,
+      "default": 3600
+    },
+    "priority": {
+      "description": "LLM execution intercept priority. Lower values run first; give guardrails a lower priority so they run on cache hits.",
+      "type": "integer",
+      "default": 150
+    },
+    "bypass_rate": {
+      "description": "Probability from 0.0 to 1.0 of skipping the cache and running live to refresh the stored answer.",
+      "type": "number",
+      "default": 0.0
+    },
+    "cache_nondeterministic": {
+      "description": "Also cache requests that are not pinned to temperature 0.",
+      "type": "boolean",
+      "default": false
+    },
+    "key_strategy": {
+      "description": "How LLM cache keys are derived. `logical` ignores tool-description wording while preserving tool interfaces.",
+      "type": "string",
+      "enum": ["exact_request", "logical"],
+      "default": "exact_request"
+    },
+    "header_allowlist": {
+      "description": "Request headers, matched case-insensitively, folded into the key. Authentication headers are rejected.",
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "backend": {
+      "description": "Storage backend shared by the LLM and tool caches.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Backend kind.",
+          "type": "string",
+          "enum": ["in_memory", "redis"],
+          "default": "in_memory"
+        },
+        "config": {
+          "description": "Backend options. `in_memory` accepts `max_bytes`; `redis` accepts `url` and `key_prefix`.",
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "redis" } }, "required": ["kind"] },
+          "then": {
+            "properties": {
+              "config": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["url"],
+                "properties": {
+                  "url": { "description": "Redis connection URL.", "type": "string" },
+                  "key_prefix": { "description": "Prefix for every stored key.", "type": "string", "default": "nemo-relay:llm-cache:" }
+                }
+              }
+            },
+            "required": ["config"]
+          },
+          "else": {
+            "properties": {
+              "config": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "max_bytes": { "description": "In-memory byte budget before oldest-first eviction.", "type": "integer", "minimum": 1, "default": 268435456 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tools": {
+      "description": "Opt-in tool-result cache. Cache only tools that are read-only and stable for their TTL.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "description": "Registers the tool-result cache.", "type": "boolean", "default": false },
+        "priority": { "description": "Tool execution intercept priority.", "type": "integer", "default": 150 },
+        "cache_errors": { "description": "Allow conventional in-band tool error results to be stored.", "type": "boolean", "default": false },
+        "default": { "$ref": "#/$defs/tool_class" },
+        "classes": {
+          "description": "Named tool classes.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/tool_class" }
+        },
+        "overrides": {
+          "description": "Per-tool refinements keyed by exact name, `prefix*`, `*suffix`, or `*contains*`.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/tool_override" }
+        }
+      }
+    },
+    "executor": {
+      "description": "SDK Tokio executor settings. The cache needs Tokio for its stores and streaming copy.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "worker_threads": { "description": "Positive number of executor workers.", "type": "integer", "minimum": 1, "default": 2 }
+      }
+    }
+  },
+  "$defs": {
+    "tool_class": {
+      "description": "Caching policy shared by a class of tools.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": { "description": "Whether members may be served from cache.", "type": "boolean", "default": false },
+        "ttl_seconds": { "description": "TTL in seconds; inherits the cache TTL when unset.", "type": ["integer", "null"], "minimum": 0 },
+        "bypass_rate": { "description": "Live-rerun probability; inherits the cache rate when unset.", "type": ["number", "null"] },
+        "tool_version": { "description": "Version string folded into member keys.", "type": ["string", "null"] },
+        "arg_skip": { "description": "Top-level argument keys dropped before keying.", "type": "array", "items": { "type": "string" } },
+        "members": { "description": "Exact tool names or `prefix*`, `*suffix`, `*contains*` patterns.", "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "tool_override": {
+      "description": "Per-tool refinement applied after class resolution.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": { "description": "Overrides class cacheability.", "type": ["boolean", "null"] },
+        "ttl_seconds": { "description": "Overrides the class TTL.", "type": ["integer", "null"], "minimum": 0 },
+        "bypass_rate": { "description": "Overrides the class bypass rate.", "type": ["number", "null"] },
+        "tool_version": { "description": "Version string folded into the key.", "type": ["string", "null"] },
+        "arg_skip": { "description": "Replaces the class argument skip list.", "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    }
+  }
+}
