@@ -21,7 +21,9 @@ use std::sync::Arc;
 
 use nemo_relay_types::api::runtime::{LlmExecutionFn, LlmStreamExecutionFn, ToolExecutionFn};
 
-pub(crate) const PRIORITY: i32 = i32::MAX;
+/// Relay runs lower priorities first, so the lowest priority makes record/replay
+/// the outermost intercept: no earlier intercept can answer a call around it.
+pub(crate) const PRIORITY: i32 = i32::MIN;
 
 /// Model and tool intercepts for one record/replay session.
 pub(crate) struct Activation {

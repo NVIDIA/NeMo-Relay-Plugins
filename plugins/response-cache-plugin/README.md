@@ -104,7 +104,7 @@ tool_results = "placeholder"
 | `latency_scale` | Multiplies each recorded chunk time. `0` turns off waiting. |
 | `start_gate` | Optional `path` and `timeout_seconds`. The first request must match before the run reports ready. |
 | `key_filters` | Drops or redacts parts of a request before it is matched, and can replace tool results with placeholders. |
-| `divergence` | Which live tool results to compare with the trace, and how much output size may change. |
+| `divergence` | Which live tool results to compare with the trace, and how much output size may change. Only tools in `tool_names` have their result shape checked. |
 
 The trace folder must already exist. Recording never overwrites trace files.
 After the recording process exits, the launcher removes `record.lock` before
@@ -112,10 +112,14 @@ starting a replay. A locked, corrupt, or mismatched trace makes every model
 call fail with an `RR-*` error instead of calling the provider. Repeated
 requests use their recorded answers in order.
 
-Each chunk's time is when the plugin received it from the provider, so a replay
-follows the provider's pace. A call counts as complete when the provider's
-stream ends; a caller that drops the stream first is recorded as
+The plugin reads the provider's stream as it arrives, even when the caller reads
+more slowly. Each chunk's time is when the plugin received it from the provider,
+so a replay follows the provider's pace. A call counts as complete when the caller reads the whole
+answer; a call the caller cancels or drops first is recorded as
 `consumer_dropped`.
+
+Record/replay runs before every other execution intercept, so no other plugin
+can answer a model call around it.
 
 Record/replay needs a Unix system. Do not combine it with tool caching, cache
 bypass, header allowlists, a Redis backend, or a custom `priority`. Those

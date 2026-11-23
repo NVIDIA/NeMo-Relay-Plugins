@@ -19,16 +19,8 @@ use crate::tool::{is_supported_tool_pattern, wildcard_patterns_overlap};
 /// These are hard errors (not policy-driven): an invalid response-cache config
 /// fails component activation rather than silently disabling the cache,
 /// so a misconfiguration is caught at startup instead of producing surprising
-/// runtime behavior.
-pub(crate) fn validate_response_cache(
-    report: &mut Vec<ConfigDiagnostic>,
-    config: &ResponseCacheConfig,
-) {
-    validate_response_cache_with_raw(report, config, None);
-}
-
-/// Validates a configuration, using the raw object to tell explicit settings
-/// from defaults where record/replay forbids them.
+/// runtime behavior. The raw object tells explicit settings from defaults
+/// where record/replay forbids them.
 pub(crate) fn validate_response_cache_with_raw(
     report: &mut Vec<ConfigDiagnostic>,
     config: &ResponseCacheConfig,

@@ -168,8 +168,14 @@ impl KeyBuilder {
                         result.push_str(&rest[..start]);
                         let tail = &rest[start + block.start.len()..];
                         let Some(end) = tail.find(&block.end) else {
+                            // Redact through the end of the text, so an unclosed
+                            // block never reaches the trace; the request stays
+                            // keyless.
                             *reason = Some("unterminated_block".into());
-                            return;
+                            result.push_str(REDACTED);
+                            count += 1;
+                            rest = "";
+                            break;
                         };
                         result.push_str(REDACTED);
                         count += 1;

@@ -17,8 +17,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Instant, Sleep};
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt};
 
 pub fn make_buffered(session: Arc<Session>) -> LlmExecutionFn {
     Arc::new(move |operation, request, _context, next| {
@@ -27,7 +28,17 @@ pub fn make_buffered(session: Arc<Session>) -> LlmExecutionFn {
         Box::pin(async move {
             let run = session.enter(&operation, &request, false).await?;
             if session.config.mode == "record" {
+                // A cancelled call still writes its line, so its repeat index
+                // is never left out of the trace.
+                let mut pending = PendingRecord {
+                    session: session.clone(),
+                    operation: operation.clone(),
+                    request: request.clone(),
+                    stream: false,
+                    run: Some(run),
+                };
                 let result = next(request.clone()).await;
+                let run = pending.run.take().expect("pending run");
                 if result.is_ok() {
                     session.completed_model(&run);
                 }
@@ -80,7 +91,16 @@ pub fn make_stream(session: Arc<Session>) -> LlmStreamExecutionFn {
         Box::pin(async move {
             let run = session.enter(&operation, &request, true).await?;
             if session.config.mode == "record" {
-                let upstream = match next(request.clone()).await {
+                let mut pending = PendingRecord {
+                    session: session.clone(),
+                    operation: operation.clone(),
+                    request: request.clone(),
+                    stream: true,
+                    run: Some(run),
+                };
+                let opened = next(request.clone()).await;
+                let run = pending.run.take().expect("pending run");
+                let upstream = match opened {
                     Ok(stream) => stream,
                     Err(error) => {
                         session.append(
@@ -111,10 +131,14 @@ pub fn make_stream(session: Arc<Session>) -> LlmStreamExecutionFn {
                     chunks: vec![],
                     error: false,
                     producer_ended: false,
+                    consumer_ended: false,
                     total_us: None,
                 }));
+                let (chunks, reader) = spawn_reader(upstream, state.clone());
                 Ok(LlmJsonStream::from_closeable(RecordStream {
-                    upstream,
+                    chunks,
+                    reader: Some(reader),
+                    upstream: None,
                     state,
                     finished: false,
                 }))
@@ -150,6 +174,36 @@ pub fn make_stream(session: Arc<Session>) -> LlmStreamExecutionFn {
     })
 }
 
+/// Writes a `consumer_dropped` line for a recording cancelled before the
+/// provider answered or opened its stream.
+struct PendingRecord {
+    session: Arc<Session>,
+    operation: String,
+    request: LlmRequest,
+    stream: bool,
+    run: Option<Run>,
+}
+impl Drop for PendingRecord {
+    fn drop(&mut self) {
+        let Some(run) = self.run.take() else {
+            return;
+        };
+        let answer = RecordedAnswer {
+            stream: self.stream,
+            outcome: "consumer_dropped",
+            total: run.t0.elapsed().as_micros() as u64,
+            first: None,
+            chunks: self.stream.then(Vec::new),
+            response: Json::Null,
+        };
+        self.session.append(
+            "calls",
+            call_line(&self.operation, &self.request, &run, answer),
+            Some(run.seq),
+        );
+    }
+}
+
 struct RecordedAnswer<'a> {
     stream: bool,
     outcome: &'a str,
@@ -183,10 +237,88 @@ struct Recording {
     chunks: Vec<Chunk>,
     error: bool,
     producer_ended: bool,
+    consumer_ended: bool,
     total_us: Option<u64>,
 }
+
+/// Asks the reader to stop and hand back the upstream stream.
+type ReaderStop = oneshot::Sender<oneshot::Sender<LlmJsonStream>>;
+
+/// Reads the upstream as fast as the provider produces it, so each chunk's
+/// time is the provider's and does not include pauses by the caller.
+fn spawn_reader(
+    mut upstream: LlmJsonStream,
+    state: Arc<Mutex<Recording>>,
+) -> (mpsc::UnboundedReceiver<Result<Json>>, ReaderStop) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let (stop, mut stopped) = oneshot::channel::<oneshot::Sender<LlmJsonStream>>();
+    tokio::spawn(async move {
+        let mut tx = Some(tx);
+        loop {
+            let Some(sender) = tx.clone() else {
+                break;
+            };
+            tokio::select! {
+                biased;
+                request = &mut stopped => {
+                    if let Ok(reply) = request {
+                        let _ = reply.send(upstream);
+                    }
+                    return;
+                }
+                item = upstream.next() => match item {
+                    Some(item) => {
+                        record_item(&state, &item);
+                        let _ = sender.send(item);
+                    }
+                    None => {
+                        let mut state = lock(&state);
+                        if let Some(run) = state.run.as_mut() {
+                            let total = run.t0.elapsed().as_micros() as u64;
+                            // The upstream ended, so the call is no longer in flight.
+                            run.guard.take();
+                            state.total_us = Some(total);
+                            state.producer_ended = true;
+                        }
+                        tx = None;
+                    }
+                },
+            }
+        }
+        // Keep the upstream until the caller closes or drops its stream.
+        if let Ok(reply) = stopped.await {
+            let _ = reply.send(upstream);
+        }
+    });
+    (rx, stop)
+}
+
+fn record_item(state: &Arc<Mutex<Recording>>, item: &Result<Json>) {
+    let mut state = lock(state);
+    match item {
+        Ok(data) => {
+            if let Some(run) = &state.run {
+                let offset = run.t0.elapsed().as_micros() as u64;
+                // `response.incomplete` is a normal terminal.
+                state.error |= data.get("error").is_some_and(|e| !e.is_null())
+                    || matches!(
+                        data.get("type").and_then(Json::as_str),
+                        Some("response.failed" | "error")
+                    );
+                state.chunks.push(Chunk {
+                    offset_us: offset,
+                    data: data.clone(),
+                });
+            }
+        }
+        Err(_) => state.error = true,
+    }
+}
+
 struct RecordStream {
-    upstream: LlmJsonStream,
+    chunks: mpsc::UnboundedReceiver<Result<Json>>,
+    reader: Option<ReaderStop>,
+    upstream: Option<LlmJsonStream>,
     state: Arc<Mutex<Recording>>,
     finished: bool,
 }
@@ -197,39 +329,11 @@ impl Stream for RecordStream {
         if this.finished {
             return Poll::Ready(None);
         }
-        match Pin::new(&mut this.upstream).poll_next(cx) {
-            Poll::Ready(Some(Ok(data))) => {
-                let mut state = lock(&this.state);
-                if let Some(run) = &state.run {
-                    let offset = run.t0.elapsed().as_micros() as u64;
-                    // `response.incomplete` is a normal terminal.
-                    state.error |= data.get("error").is_some_and(|e| !e.is_null())
-                        || matches!(
-                            data.get("type").and_then(Json::as_str),
-                            Some("response.failed" | "error")
-                        );
-                    state.chunks.push(Chunk {
-                        offset_us: offset,
-                        data: data.clone(),
-                    });
-                }
-                Poll::Ready(Some(Ok(data)))
-            }
-            Poll::Ready(Some(Err(error))) => {
-                lock(&this.state).error = true;
-                Poll::Ready(Some(Err(error)))
-            }
+        match this.chunks.poll_recv(cx) {
+            Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
             Poll::Ready(None) => {
                 this.finished = true;
-                {
-                    let mut state = lock(&this.state);
-                    if let Some(run) = state.run.as_mut() {
-                        let total = run.t0.elapsed().as_micros() as u64;
-                        run.guard.take();
-                        state.total_us = Some(total);
-                        state.producer_ended = true;
-                    }
-                }
+                lock(&this.state).consumer_ended = true;
                 finalize_record(&this.state);
                 Poll::Ready(None)
             }
@@ -241,7 +345,16 @@ impl LlmStreamInner for RecordStream {
     fn close(self: Pin<&mut Self>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         let this = self.get_mut();
         Box::pin(async move {
-            let result = this.upstream.close().await;
+            if let Some(reader) = this.reader.take() {
+                let (reply, upstream) = oneshot::channel();
+                if reader.send(reply).is_ok() {
+                    this.upstream = upstream.await.ok();
+                }
+            }
+            let result = match this.upstream.as_mut() {
+                Some(upstream) => upstream.close().await,
+                None => Ok(()),
+            };
             if !this.finished {
                 this.finished = true;
                 finalize_record(&this.state);
@@ -266,7 +379,7 @@ fn finalize_record(state: &Arc<Mutex<Recording>>) {
     let (response, terminal) = aggregate(&state.chunks);
     let outcome = if state.error {
         "stream_error"
-    } else if !state.producer_ended {
+    } else if !state.producer_ended || !state.consumer_ended {
         "consumer_dropped"
     } else if terminal {
         "ok"

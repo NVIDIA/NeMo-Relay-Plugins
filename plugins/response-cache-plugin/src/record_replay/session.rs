@@ -86,6 +86,34 @@ pub struct Session {
     pub cache: ResponseCacheConfig,
     pub state: Arc<State>,
 }
+/// Returns a claimed repeat index when its call is cancelled before it runs.
+struct RepeatClaim {
+    state: Arc<State>,
+    hash: Option<String>,
+}
+impl Drop for RepeatClaim {
+    fn drop(&mut self) {
+        if let Some(hash) = &self.hash
+            && let Some(count) = lock(&self.state.data).repeats.get_mut(hash)
+        {
+            *count = count.saturating_sub(1);
+        }
+    }
+}
+
+/// Reopens the start gate when the first request stops waiting before the gate
+/// settles.
+struct GateWait {
+    state: Arc<State>,
+    settled: bool,
+}
+impl Drop for GateWait {
+    fn drop(&mut self) {
+        if !self.settled {
+            lock(&self.state.data).gate_entered = false;
+        }
+    }
+}
 pub struct ModelGuard {
     state: Arc<State>,
 }
@@ -409,7 +437,15 @@ impl Session {
         } else {
             Some(code.is_none())
         };
-        let (gate_wait_ms, release) = self.gate(seq, &key, found, code.is_none()).await?;
+        // A call cancelled while it waits at the gate never ran, so it gives
+        // its repeat index back for the retry.
+        let mut claim = RepeatClaim {
+            state: self.state.clone(),
+            hash: key.hash.clone().filter(|_| repeat.is_some()),
+        };
+        let gate = self.gate(seq, &key, found, code.is_none()).await;
+        claim.hash = None;
+        let (gate_wait_ms, release) = gate?;
         if let Some(code) = code {
             let detail = if code == "RR-MISS" {
                 self.miss(seq, &key)
@@ -494,6 +530,12 @@ impl Session {
         let mut release = start;
         if let Some(gate) = &self.config.start_gate {
             let deadline = start + Duration::from_secs(gate.timeout_seconds);
+            // A cancelled wait reopens the gate, so a retry waits again
+            // instead of skipping it.
+            let mut waiting = GateWait {
+                state: self.state.clone(),
+                settled: false,
+            };
             loop {
                 match tokio::fs::try_exists(&gate.path).await {
                     Ok(true) => {
@@ -504,6 +546,7 @@ impl Session {
                         lock(&self.state.data)
                             .fail
                             .get_or_insert_with(|| "config_invalid".into());
+                        waiting.settled = true;
                         armed["gate_outcome"] = json!("unreadable");
                         armed["gate_wait_ms"] = json!(start.elapsed().as_millis() as u64);
                         let _ = trace::atomic_json(&path, &armed);
@@ -519,6 +562,7 @@ impl Session {
                     Ok(false) => {}
                 }
                 if Instant::now() >= deadline {
+                    waiting.settled = true;
                     lock(&self.state.data).gate_failed = true;
                     armed["gate_outcome"] = json!("timed_out");
                     armed["gate_wait_ms"] = json!(start.elapsed().as_millis() as u64);
@@ -537,6 +581,7 @@ impl Session {
                 )
                 .await;
             }
+            waiting.settled = true;
             armed["gate_outcome"] = json!("released");
         }
         armed["gate_release_unix_ns"] = json!(if self.config.start_gate.is_none() {

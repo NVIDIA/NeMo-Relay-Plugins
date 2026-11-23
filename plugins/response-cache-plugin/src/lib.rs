@@ -134,7 +134,8 @@ impl Plugin for ResponseCachePlugin {
             let config = parse_config(plugin_config).map_err(PluginError::InvalidConfig)?;
             host::install(Arc::new(host::RuntimeHost(context.runtime())));
             if config.record_replay.is_some() {
-                return register_record_replay(context, config).map_err(PluginError::from);
+                return register_record_replay(context, config, plugin_config)
+                    .map_err(PluginError::from);
             }
             let store = match store::build_store(&config).await {
                 Ok(store) => store,
@@ -158,14 +159,17 @@ impl Plugin for ResponseCachePlugin {
     }
 }
 
-/// Installs record/replay in place of the cache, at the highest priority so it
-/// sees every model and tool call before other intercepts.
+/// Installs record/replay in place of the cache as the outermost intercept, so
+/// it sees every model and tool call before other intercepts.
 fn register_record_replay(
     context: &mut PluginContext<'_>,
     config: ResponseCacheConfig,
+    raw: &Map<String, Json>,
 ) -> nemo_relay_plugin::Result<()> {
+    // The raw object tells an explicit `priority` from the default, which
+    // record/replay forbids; validation and registration must agree.
     let mut diagnostics = Vec::new();
-    validation::validate_response_cache(&mut diagnostics, &config);
+    validation::validate_response_cache_with_raw(&mut diagnostics, &config, Some(raw));
     let codes = diagnostics
         .into_iter()
         .map(|diagnostic| diagnostic.code)

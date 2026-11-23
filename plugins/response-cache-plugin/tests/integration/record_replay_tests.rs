@@ -17,8 +17,11 @@ use nemo_relay_runtime::api::llm::{
     LlmCallExecuteParams, LlmRequest, LlmStreamCallExecuteParams, llm_call_execute,
     llm_stream_call_execute,
 };
+use nemo_relay_runtime::api::registry::{
+    deregister_llm_execution_intercept, register_llm_execution_intercept,
+};
 use nemo_relay_runtime::api::runtime::{
-    LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionNextFn,
+    LlmExecutionFn, LlmExecutionNextFn, LlmJsonStream, LlmStreamExecutionNextFn,
 };
 use serde_json::{Map, Value as Json, json};
 use tempfile::TempDir;
@@ -172,5 +175,34 @@ async fn plugin_records_and_replays_without_the_provider() {
     let miss = buffered_call(&buffered, "unrecorded").await.unwrap_err();
     assert!(miss.contains("RR-MISS"), "{miss}");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
+    test_close_plugin_host().unwrap();
+
+    // An explicit priority is forbidden, so recording fails closed.
+    let mut forbidden = config("record", &trace, &root.path().join("forbidden"));
+    forbidden.insert("priority".into(), json!(7));
+    activate_plugin(forbidden, Vec::new()).await.unwrap();
+    let error = buffered_call(&buffered, "buffered").await.unwrap_err();
+    assert!(error.contains("RR-UNAVAILABLE"), "{error}");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    test_close_plugin_host().unwrap();
+
+    // Record/replay is the outermost intercept: an intercept that answers on
+    // its own cannot get around a fail-closed replay.
+    let cached: LlmExecutionFn =
+        Arc::new(|_, _, _, _| Box::pin(async { Ok(json!({"cached": true})) }));
+    register_llm_execution_intercept("earlier_answer", 150, cached).unwrap();
+    activate_plugin(
+        config(
+            "replay",
+            &root.path().join("missing"),
+            &root.path().join("missing-out"),
+        ),
+        Vec::new(),
+    )
+    .await
+    .unwrap();
+    let error = buffered_call(&buffered, "buffered").await.unwrap_err();
+    deregister_llm_execution_intercept("earlier_answer").unwrap();
+    assert!(error.contains("RR-UNAVAILABLE"), "{error}");
     test_close_plugin_host().unwrap();
 }

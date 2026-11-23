@@ -1079,3 +1079,194 @@ fn an_existing_record_lock_reports_trace_locked() {
         Some("trace_locked")
     );
 }
+
+#[tokio::test]
+async fn unterminated_redaction_block_never_reaches_the_trace() {
+    let dirs = Dirs::new();
+    let mut cfg = dirs.cache("record");
+    cfg.record_replay.as_mut().unwrap()["key_filters"] =
+        json!({"redact_blocks":[{"start":"<secret>","end":"</secret>"}]});
+    let session = Session::activate(cfg, false);
+    unary(
+        session.clone(),
+        request("before <secret>token-123 and the rest"),
+        provider(Arc::new(AtomicUsize::new(0))),
+    )
+    .await
+    .unwrap();
+    session.close();
+    let line = &json_lines(&dirs.trace.join("requests.jsonl")).unwrap()[0];
+    let content = line["filtered_request"]["messages"][0]["content"]
+        .as_str()
+        .unwrap();
+    assert!(content.starts_with("before "), "{content}");
+    assert!(!content.contains("token-123"), "{content}");
+    assert!(line["key_hash"].is_null());
+}
+
+#[tokio::test(start_paused = true)]
+async fn recorded_chunk_times_exclude_caller_pauses() {
+    let dirs = Dirs::new();
+    let session = Session::activate(dirs.cache("record"), false);
+    let mut stream = streaming(
+        session.clone(),
+        stream_provider(Arc::new(AtomicUsize::new(0))),
+    )
+    .await;
+    stream.next().await.unwrap().unwrap();
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    while stream.next().await.is_some() {}
+    session.close();
+    let line = json_lines(&dirs.trace.join("calls.jsonl"))
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(line["outcome"], "ok");
+    let offsets: Vec<_> = line["chunks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["offset_us"].as_u64().unwrap())
+        .collect();
+    // The provider produced every chunk at once; the caller's pause is not
+    // part of the recorded schedule.
+    assert!(offsets.iter().all(|&offset| offset < 1_000), "{offsets:?}");
+}
+
+#[tokio::test]
+async fn cancelled_recordings_keep_the_trace_readable() {
+    let dirs = Dirs::new();
+    let session = Session::activate(dirs.cache("record"), false);
+    let hang: LlmExecutionNextFn = Arc::new(|_| Box::pin(std::future::pending()));
+    let cancelled = tokio::spawn(unary(session.clone(), request("stable"), hang));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    cancelled.abort();
+    let _ = cancelled.await;
+    let hang_stream: LlmStreamExecutionNextFn = Arc::new(|_| Box::pin(std::future::pending()));
+    let cancelled = tokio::spawn(async move {
+        let stream = stream::make_stream(session.clone())(
+            "openai",
+            request("stream"),
+            LlmExecutionContext::default(),
+            hang_stream,
+        );
+        drop(stream.await);
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    cancelled.abort();
+    let _ = cancelled.await;
+    let session = Session::activate(dirs.cache("record"), false);
+    unary(
+        session.clone(),
+        request("stable"),
+        provider(Arc::new(AtomicUsize::new(0))),
+    )
+    .await
+    .unwrap();
+    session.close();
+    let calls = json_lines(&dirs.trace.join("calls.jsonl")).unwrap();
+    let outcomes: Vec<_> = calls
+        .iter()
+        .map(|c| {
+            (
+                c["stream"].clone(),
+                c["repeat_index"].clone(),
+                c["outcome"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        outcomes,
+        vec![
+            (json!(false), json!(0), json!("consumer_dropped")),
+            (json!(true), json!(0), json!("consumer_dropped")),
+            (json!(false), json!(1), json!("ok")),
+        ]
+    );
+    let replay = dirs.copy_finalized();
+    let session = Session::activate(replay.cache("replay"), false);
+    assert_eq!(lock(&session.state.data).fail, None);
+}
+
+#[tokio::test]
+async fn cancelled_gate_wait_keeps_the_gate_closed_for_the_retry() {
+    let dirs = Dirs::new();
+    let mut cfg = dirs.cache("record");
+    let go = dirs.root.join("go");
+    cfg.record_replay.as_mut().unwrap()["start_gate"] = json!({"path":go,"timeout_seconds":5});
+    let session = Session::activate(cfg, false);
+    let count = Arc::new(AtomicUsize::new(0));
+    let first = tokio::spawn(unary(
+        session.clone(),
+        request("stable"),
+        provider(count.clone()),
+    ));
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !dirs.out.join("armed.json").exists() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    first.abort();
+    let _ = first.await;
+    let retry = tokio::spawn(unary(
+        session.clone(),
+        request("stable"),
+        provider(count.clone()),
+    ));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!retry.is_finished());
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    fs::write(go, "go").unwrap();
+    retry.await.unwrap().unwrap();
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    session.close();
+    // The cancelled wait gave its repeat index back.
+    let calls = json_lines(&dirs.trace.join("calls.jsonl")).unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["repeat_index"], 0);
+}
+
+#[tokio::test]
+async fn verify_accepts_identical_results_from_unchecked_tools() {
+    fn cache(dirs: &Dirs, mode: &str) -> ResponseCacheConfig {
+        let mut cfg = dirs.cache(mode);
+        cfg.record_replay.as_mut().unwrap()["divergence"] =
+            json!({"tool_names":["terminal"],"tool_fields":[],"flag_fields":[]});
+        cfg
+    }
+    async fn run(
+        session: Arc<Session>,
+        models: Arc<AtomicUsize>,
+    ) -> nemo_relay_types::error::Result<Json> {
+        unary(session.clone(), request("first"), provider(models.clone())).await?;
+        let next: ToolExecutionNextFn = Arc::new(|_| {
+            Box::pin(async {
+                Ok(ToolExecutionResult {
+                    result: json!("file contents"),
+                    annotation: None,
+                })
+            })
+        });
+        tool::make_tool(session.clone())(
+            ToolExecutionContext::new("read_file", json!({"path":"a"}))
+                .with_tool_call_id(Some("call-1".into())),
+            next,
+        )
+        .await?;
+        unary(session, request("second"), provider(models)).await
+    }
+    let dirs = Dirs::new();
+    let record = Session::activate(cache(&dirs, "record"), false);
+    run(record.clone(), Arc::new(AtomicUsize::new(0)))
+        .await
+        .unwrap();
+    record.close();
+    let replay = dirs.copy_finalized();
+    let verify = Session::activate(cache(&replay, "verify"), false);
+    let models = Arc::new(AtomicUsize::new(0));
+    run(verify.clone(), models.clone()).await.unwrap();
+    assert_eq!(models.load(Ordering::SeqCst), 0);
+    verify.close();
+}

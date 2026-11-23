@@ -101,18 +101,19 @@ pub fn make_tool(session: Arc<Session>) -> ToolExecutionFn {
                 }
                 Err(_) => ("raised", Json::Null),
             };
-            let shape = if session.config.divergence.tool_names.is_empty() {
-                None
-            } else {
-                Some(
-                    session.config.divergence.tool_names.contains(&name)
-                        && kind == "json_object"
+            // Only tools named in `divergence.tool_names` have a checked shape.
+            let shape = session
+                .config
+                .divergence
+                .tool_names
+                .contains(&name)
+                .then(|| {
+                    kind == "json_object"
                         && !value
                             .get("error")
                             .and_then(Json::as_str)
-                            .is_some_and(|s| s.starts_with("[TOOL_ERROR]")),
-                )
-            };
+                            .is_some_and(|s| s.starts_with("[TOOL_ERROR]"))
+                });
             let fields: serde_json::Map<String, Json> = session
                 .config
                 .divergence
