@@ -24,13 +24,19 @@ nemo-relay-types = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-R
 
 futures = "0.3"
 redis = { version = "1.1", features = ["tokio-comp", "connection-manager"] }
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_json_canonicalizer = "0.3"
 sha2 = "0.11"
 thiserror = "2"
-tokio = { version = "1.53.3", features = ["rt", "macros", "sync", "time"] }
+tokio = { version = "1.53.3", features = ["rt", "macros", "sync", "time", "fs"] }
 tokio-stream = { version = "0.1", default-features = false, features = ["sync"] }
+uuid = { version = "1.18", features = ["v4"] }
+
+# Record/replay reads the monotonic clock for its timing files.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 nemo-relay-adaptive = { version = "=1.0.0", git = "https://github.com/NVIDIA/NeMo-Relay.git", rev = "0dfd8e0a176d08d034f824d6fd97a2596465b4f1" }
@@ -52,3 +58,7 @@ path = "tests/integration/response_cache_benchmark_tests.rs"
 [[test]]
 name = "stream_cleanup"
 path = "tests/integration/stream_cleanup_tests.rs"
+
+[[test]]
+name = "record_replay"
+path = "tests/integration/record_replay_tests.rs"

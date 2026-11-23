@@ -213,7 +213,7 @@ fn contains_unrepresentable_int(value: &Json) -> bool {
 
 /// Canonicalizes straight into SHA-256; byte-identical output to
 /// `sha256_hex(&canonicalize_value(doc)?)` (proven by test).
-fn fingerprint<T: serde::Serialize>(doc: &T) -> Option<String> {
+pub(crate) fn fingerprint<T: serde::Serialize>(doc: &T) -> Option<String> {
     let mut hasher = Sha256::new();
     serde_json_canonicalizer::to_writer(doc, &mut HashWriter(&mut hasher)).ok()?;
     let digest = hasher.finalize();
@@ -227,6 +227,40 @@ fn fingerprint<T: serde::Serialize>(doc: &T) -> Option<String> {
 }
 
 const HEX: [u8; 16] = *b"0123456789abcdef";
+
+/// Reuse the ordinary cache's normalized document without its live bypasses.
+/// Headers are deliberately excluded from trace keys and stored requests.
+pub(crate) fn record_replay_document(
+    provider: &str,
+    request: &LlmRequest,
+    config: &ResponseCacheConfig,
+    filters: &Json,
+) -> Option<Json> {
+    if request.content.is_null() {
+        return None;
+    }
+    let (mut body, codec) = resolved_body(provider, request);
+    if let Some(object) = body.as_object_mut() {
+        for key in DEFAULT_SKIP_KEYS {
+            object.remove(*key);
+        }
+        normalize_tool_call_ids(object);
+        if config.key_strategy == ResponseCacheKeyStrategy::Logical
+            && let Some(tools) = object.get("tools").cloned()
+        {
+            object.insert("tools".into(), structural_tool_schema(&tools));
+        }
+    }
+    let mut document = json!({"v": CACHE_SCHEMA_VERSION, "ns":config.namespace, "provider":provider,
+        "strategy":config.key_strategy, "codec":codec,
+        "openai_chat_token_cap":openai_chat_token_cap_spelling(provider, request), "body":body, "headers":{}});
+    if filters
+        != &serde_json::to_value(crate::record_replay::config::KeyFiltersConfig::default()).ok()?
+    {
+        document["record_replay_filters"] = filters.clone();
+    }
+    (!contains_unrepresentable_int(&document)).then_some(document)
+}
 
 /// Feeds canonical bytes straight into the hasher (`digest` 0.11 no longer
 /// implements `io::Write` for hashers).

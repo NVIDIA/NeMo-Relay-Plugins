@@ -1704,6 +1704,7 @@ name = "nemo-relay-response-cache-plugin"
 version = "1.0.0"
 dependencies = [
  "futures",
+ "libc",
  "nemo-relay-adaptive",
  "nemo-relay-codecs",
  "nemo-relay-model-pricing",
@@ -1712,6 +1713,7 @@ dependencies = [
  "nemo-relay-runtime",
  "nemo-relay-types",
  "redis",
+ "regex",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
@@ -1721,6 +1723,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
+ "uuid",
 ]
 
 [[package]]
