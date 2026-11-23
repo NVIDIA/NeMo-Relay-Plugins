@@ -29,10 +29,13 @@ pub fn make_tool(session: Arc<Session>) -> ToolExecutionFn {
             let name = context.tool_name().to_string();
             let args = context.args().clone();
             let id = context.tool_call_id().map(str::to_string);
-            let failed = {
+            // Take the call's ID under the same lock that counts it, so
+            // concurrent tools never share one.
+            let (token, failed) = {
                 let mut data = lock(&session.state.data);
+                let token = data.tool_calls;
                 data.tool_calls += 1;
-                data.fail.is_some()
+                (token, data.fail.is_some())
             };
             if failed {
                 // Tools always run live; fail-closed only refuses model
@@ -45,9 +48,8 @@ pub fn make_tool(session: Arc<Session>) -> ToolExecutionFn {
                         pending_marks: vec![],
                     });
             }
-            let (token, parent, ordinal) = {
+            let (parent, ordinal) = {
                 let mut data = lock(&session.state.data);
-                let token = data.tool_calls - 1;
                 let overlap = !data.tools_active.is_empty();
                 if overlap {
                     for value in data.tools_active.values_mut() {
@@ -65,7 +67,7 @@ pub fn make_tool(session: Arc<Session>) -> ToolExecutionFn {
                 let ordinal = data.ordinals.entry(key).or_default();
                 let index = *ordinal;
                 *ordinal += 1;
-                (token, parent, index)
+                (parent, index)
             };
             let _guard = ToolGuard {
                 state: session.state.clone(),

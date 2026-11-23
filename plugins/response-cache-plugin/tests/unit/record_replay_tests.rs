@@ -1270,3 +1270,104 @@ async fn verify_accepts_identical_results_from_unchecked_tools() {
     assert_eq!(models.load(Ordering::SeqCst), 0);
     verify.close();
 }
+
+#[tokio::test]
+async fn record_and_replay_admit_the_next_call_at_the_same_point() {
+    async fn sequence(session: Arc<Session>, models: Arc<AtomicUsize>) {
+        let mut stream = streaming(session.clone(), stream_provider(models.clone())).await;
+        // Let the recorder read the whole provider stream ahead of the caller.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let early = unary(session.clone(), request("other"), provider(models.clone())).await;
+        assert!(
+            early.unwrap_err().to_string().contains("RR-CONCURRENT"),
+            "the unread stream is still in flight"
+        );
+        while stream.next().await.is_some() {}
+        unary(session, request("other"), provider(models))
+            .await
+            .unwrap();
+    }
+    let dirs = Dirs::new();
+    let record = Session::activate(dirs.cache("record"), false);
+    sequence(record.clone(), Arc::new(AtomicUsize::new(0))).await;
+    record.close();
+    let replay = dirs.copy_finalized();
+    let session = Session::activate(replay.cache("replay"), false);
+    let models = Arc::new(AtomicUsize::new(0));
+    sequence(session.clone(), models.clone()).await;
+    assert_eq!(models.load(Ordering::SeqCst), 0);
+    session.close();
+}
+
+#[tokio::test]
+async fn first_miss_leaves_the_gate_armed_for_a_later_match() {
+    let dirs = recorded_buffered().await;
+    let mut cfg = dirs.cache("replay");
+    let go = dirs.root.join("go");
+    cfg.record_replay.as_mut().unwrap()["start_gate"] = json!({"path":go,"timeout_seconds":5});
+    let session = Session::activate(cfg, false);
+    let count = Arc::new(AtomicUsize::new(0));
+    let miss = unary(
+        session.clone(),
+        request("different"),
+        provider(count.clone()),
+    )
+    .await;
+    assert!(miss.unwrap_err().to_string().contains("RR-MISS"));
+    let hit = tokio::spawn(unary(
+        session.clone(),
+        request("stable"),
+        provider(count.clone()),
+    ));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!hit.is_finished(), "a match waits for the release");
+    let armed: Json =
+        serde_json::from_slice(&fs::read(dirs.out.join("armed.json")).unwrap()).unwrap();
+    assert_eq!(armed["gate_outcome"], "waiting");
+    fs::write(go, "go").unwrap();
+    assert_eq!(hit.await.unwrap().unwrap()["n"], 0);
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    session.close();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_tools_track_every_call() {
+    const CALLS: usize = 256;
+    let dirs = Dirs::new();
+    let session = Session::activate(dirs.cache("record"), false);
+    unary(
+        session.clone(),
+        request("stable"),
+        provider(Arc::new(AtomicUsize::new(0))),
+    )
+    .await
+    .unwrap();
+    // Every call waits until all have started, so each one overlaps another.
+    let barrier = Arc::new(tokio::sync::Barrier::new(CALLS));
+    let calls: Vec<_> = (0..CALLS)
+        .map(|i| {
+            let barrier = barrier.clone();
+            let next: ToolExecutionNextFn = Arc::new(move |_| {
+                let barrier = barrier.clone();
+                Box::pin(async move {
+                    barrier.wait().await;
+                    Ok(ToolExecutionResult {
+                        result: json!({"exit_code":0}),
+                        annotation: None,
+                    })
+                })
+            });
+            let context = ToolExecutionContext::new("terminal", json!({"i":i}))
+                .with_tool_call_id(Some(format!("call-{i}")));
+            tokio::spawn(tool::make_tool(session.clone())(context, next))
+        })
+        .collect();
+    for call in calls {
+        call.await.unwrap().unwrap();
+    }
+    assert!(lock(&session.state.data).tools_active.is_empty());
+    session.close();
+    let lines = json_lines(&dirs.trace.join("tools.jsonl")).unwrap();
+    assert_eq!(lines.len(), CALLS);
+    assert!(lines.iter().all(|line| line["overlapped"] == true));
+}

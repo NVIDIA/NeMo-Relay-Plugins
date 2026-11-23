@@ -272,11 +272,12 @@ fn spawn_reader(
                         let _ = sender.send(item);
                     }
                     None => {
+                        // The call stays in flight until the caller reads the
+                        // end, as in replay, so both modes admit the next call
+                        // at the same point.
                         let mut state = lock(&state);
-                        if let Some(run) = state.run.as_mut() {
+                        if let Some(run) = state.run.as_ref() {
                             let total = run.t0.elapsed().as_micros() as u64;
-                            // The upstream ended, so the call is no longer in flight.
-                            run.guard.take();
                             state.total_us = Some(total);
                             state.producer_ended = true;
                         }

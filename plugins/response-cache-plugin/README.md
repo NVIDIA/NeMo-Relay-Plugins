@@ -118,8 +118,14 @@ so a replay follows the provider's pace. A call counts as complete when the call
 answer; a call the caller cancels or drops first is recorded as
 `consumer_dropped`.
 
-Record/replay runs before every other execution intercept, so no other plugin
-can answer a model call around it.
+Record/replay registers at the lowest execution priority, so it runs before
+other execution intercepts and none can answer a model call around it. Relay
+orders intercepts with the same priority by name, so do not register another
+execution intercept at the lowest priority (`i32::MIN`) next to it.
+
+A model call stays in flight until its caller reads the whole answer, in record
+and replay alike. Starting another model call before then fails with
+`RR-CONCURRENT`.
 
 Record/replay needs a Unix system. Do not combine it with tool caching, cache
 bypass, header allowlists, a Redis backend, or a custom `priority`. Those

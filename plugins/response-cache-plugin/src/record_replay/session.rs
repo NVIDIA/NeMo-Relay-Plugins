@@ -492,7 +492,11 @@ impl Session {
             if data.gate_entered {
                 return Ok((0, None));
             }
-            data.gate_entered = true;
+            // A call that cannot be served leaves a start gate armed, so a
+            // later match still waits for the release.
+            if usable || self.config.start_gate.is_none() {
+                data.gate_entered = true;
+            }
         }
         let start = Instant::now();
         let unix = trace::now_ns();
