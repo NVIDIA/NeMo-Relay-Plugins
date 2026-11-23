@@ -132,6 +132,7 @@ pub fn make_stream(session: Arc<Session>) -> LlmStreamExecutionFn {
                     error: false,
                     producer_ended: false,
                     consumer_ended: false,
+                    cleanup_failed: false,
                     total_us: None,
                 }));
                 let (chunks, reader) = spawn_reader(upstream, state.clone());
@@ -139,6 +140,7 @@ pub fn make_stream(session: Arc<Session>) -> LlmStreamExecutionFn {
                     chunks,
                     reader: Some(reader),
                     upstream: None,
+                    cleanup: None,
                     state,
                     finished: false,
                 }))
@@ -238,11 +240,15 @@ struct Recording {
     error: bool,
     producer_ended: bool,
     consumer_ended: bool,
+    cleanup_failed: bool,
     total_us: Option<u64>,
 }
 
+/// The upstream stream, with the result of the cleanup the reader already ran
+/// at its end, if it reached the end.
+type Upstream = (LlmJsonStream, Option<Result<()>>);
 /// Asks the reader to stop and hand back the upstream stream.
-type ReaderStop = oneshot::Sender<oneshot::Sender<LlmJsonStream>>;
+type ReaderStop = oneshot::Sender<oneshot::Sender<Upstream>>;
 
 /// Reads the upstream as fast as the provider produces it, so each chunk's
 /// time is the provider's and does not include pauses by the caller.
@@ -251,44 +257,48 @@ fn spawn_reader(
     state: Arc<Mutex<Recording>>,
 ) -> (mpsc::UnboundedReceiver<Result<Json>>, ReaderStop) {
     let (tx, rx) = mpsc::unbounded_channel();
-    let (stop, mut stopped) = oneshot::channel::<oneshot::Sender<LlmJsonStream>>();
+    let (stop, mut stopped) = oneshot::channel::<oneshot::Sender<Upstream>>();
     tokio::spawn(async move {
-        let mut tx = Some(tx);
         loop {
-            let Some(sender) = tx.clone() else {
-                break;
-            };
             tokio::select! {
                 biased;
                 request = &mut stopped => {
                     if let Ok(reply) = request {
-                        let _ = reply.send(upstream);
+                        let _ = reply.send((upstream, None));
                     }
                     return;
                 }
                 item = upstream.next() => match item {
                     Some(item) => {
                         record_item(&state, &item);
-                        let _ = sender.send(item);
+                        let _ = tx.send(item);
                     }
                     None => {
                         // The call stays in flight until the caller reads the
                         // end, as in replay, so both modes admit the next call
                         // at the same point.
-                        let mut state = lock(&state);
-                        if let Some(run) = state.run.as_ref() {
-                            let total = run.t0.elapsed().as_micros() as u64;
-                            state.total_us = Some(total);
-                            state.producer_ended = true;
+                        {
+                            let mut state = lock(&state);
+                            if let Some(run) = state.run.as_ref() {
+                                let total = run.t0.elapsed().as_micros() as u64;
+                                state.total_us = Some(total);
+                                state.producer_ended = true;
+                            }
                         }
-                        tx = None;
+                        break;
                     }
                 },
             }
         }
-        // Keep the upstream until the caller closes or drops its stream.
+        // Clean up the upstream before the caller sees the end, so an answer
+        // whose cleanup failed is never recorded as servable.
+        let cleanup = upstream.close().await;
+        lock(&state).cleanup_failed = cleanup.is_err();
+        drop(tx);
+        // Keep the upstream and its cleanup result until the caller closes or
+        // drops its stream.
         if let Ok(reply) = stopped.await {
-            let _ = reply.send(upstream);
+            let _ = reply.send((upstream, Some(cleanup)));
         }
     });
     (rx, stop)
@@ -320,6 +330,8 @@ struct RecordStream {
     chunks: mpsc::UnboundedReceiver<Result<Json>>,
     reader: Option<ReaderStop>,
     upstream: Option<LlmJsonStream>,
+    /// Cleanup the reader ran at the upstream's end, reported by the first close.
+    cleanup: Option<Result<()>>,
     state: Arc<Mutex<Recording>>,
     finished: bool,
 }
@@ -348,13 +360,19 @@ impl LlmStreamInner for RecordStream {
         Box::pin(async move {
             if let Some(reader) = this.reader.take() {
                 let (reply, upstream) = oneshot::channel();
-                if reader.send(reply).is_ok() {
-                    this.upstream = upstream.await.ok();
+                if reader.send(reply).is_ok()
+                    && let Ok((upstream, cleanup)) = upstream.await
+                {
+                    this.upstream = Some(upstream);
+                    this.cleanup = cleanup;
                 }
             }
-            let result = match this.upstream.as_mut() {
-                Some(upstream) => upstream.close().await,
-                None => Ok(()),
+            // The first close reports the cleanup already run at the end; a
+            // later close retries it.
+            let result = match (this.cleanup.take(), this.upstream.as_mut()) {
+                (Some(cleanup), _) => cleanup,
+                (None, Some(upstream)) => upstream.close().await,
+                (None, None) => Ok(()),
             };
             if !this.finished {
                 this.finished = true;
@@ -378,7 +396,7 @@ fn finalize_record(state: &Arc<Mutex<Recording>>) {
         return;
     };
     let (response, terminal) = aggregate(&state.chunks);
-    let outcome = if state.error {
+    let outcome = if state.error || state.cleanup_failed {
         "stream_error"
     } else if !state.producer_ended || !state.consumer_ended {
         "consumer_dropped"

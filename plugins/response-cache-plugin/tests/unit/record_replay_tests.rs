@@ -1371,3 +1371,83 @@ async fn concurrent_tools_track_every_call() {
     assert_eq!(lines.len(), CALLS);
     assert!(lines.iter().all(|line| line["overlapped"] == true));
 }
+
+/// A provider stream whose cleanup fails and counts its close attempts.
+struct FailingCleanup {
+    frames: std::vec::IntoIter<Json>,
+    closes: Arc<AtomicUsize>,
+}
+impl tokio_stream::Stream for FailingCleanup {
+    type Item = nemo_relay_types::error::Result<Json>;
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::task::Poll::Ready(self.frames.next().map(Ok))
+    }
+}
+impl nemo_relay_types::api::runtime::LlmStreamInner for FailingCleanup {
+    fn close(
+        self: std::pin::Pin<&mut Self>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = nemo_relay_types::error::Result<()>> + Send + '_>,
+    > {
+        self.closes.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async {
+            Err(nemo_relay_types::error::FlowError::NotFound(
+                "cleanup failed".into(),
+            ))
+        })
+    }
+}
+
+#[tokio::test]
+async fn an_answer_whose_cleanup_failed_is_not_served() {
+    let dirs = Dirs::new();
+    let session = Session::activate(dirs.cache("record"), false);
+    let closes = Arc::new(AtomicUsize::new(0));
+    let next: LlmStreamExecutionNextFn = {
+        let closes = closes.clone();
+        Arc::new(move |_| {
+            let closes = closes.clone();
+            Box::pin(async move {
+                Ok(LlmJsonStream::from_closeable(FailingCleanup {
+                    frames: frames().into_iter(),
+                    closes,
+                }))
+            })
+        })
+    };
+    let mut stream = streaming(session.clone(), next).await;
+    let mut output = vec![];
+    while let Some(item) = stream.next().await {
+        output.push(item.unwrap());
+    }
+    assert_eq!(output, frames());
+    // The first close reports the cleanup already run at the end; a later
+    // close retries it.
+    assert!(stream.close().await.is_err());
+    assert_eq!(closes.load(Ordering::SeqCst), 1);
+    assert!(stream.close().await.is_err());
+    assert_eq!(closes.load(Ordering::SeqCst), 2);
+    drop(stream);
+    session.close();
+    let line = json_lines(&dirs.trace.join("calls.jsonl"))
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(line["outcome"], "stream_error");
+    let replay = dirs.copy_finalized();
+    let session = Session::activate(replay.cache("replay"), false);
+    let count = Arc::new(AtomicUsize::new(0));
+    let served = stream::make_stream(session.clone())(
+        "openai",
+        request("stable"),
+        LlmExecutionContext::default(),
+        stream_provider(count.clone()),
+    )
+    .await;
+    assert!(served.err().unwrap().to_string().contains("RR-UNSERVABLE"));
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    session.close();
+}
